@@ -1,0 +1,48 @@
+HULK: SMASH CITY v1.4.1 — CORREÇÃO DE REGRESSÃO
+
+CAUSA RAIZ CONFIRMADA:
+Na v1.4, updatePlayer() tentava ler climbWeight antes da declaração.
+Resultado reproduzido no teste isolado original:
+ReferenceError: Cannot access 'climbWeight' before initialization
+Esse ReferenceError interrompia todas as atualizações de gameplay
+imediatamente após clicar INICIAR DESTRUIÇÃO.
+
+CORREÇÃO:
+- climbWeight inicializado antes da animação das pernas e braços.
+- agendamento de requestAnimationFrame depois de uma atualização bem-sucedida.
+- erro inesperado encerra o loop defeituoso e mostra mensagem de diagnóstico.
+- nova porta HTTP 8771 para evitar abertura acidental do servidor antigo 8766.
+
+TESTES EXECUTADOS:
+[OK] Reprodução do defeito original na v1.4.
+[OK] Inicialização de updatePlayer() na v1.4.1 sem ReferenceError.
+[OK] Teste dinâmico da animação parado, andando, carregando salto,
+     no ar, escalando, socando e executando palmada, +200 quadros simulados.
+[OK] 20 casos de poderes: carregamento, superpulo, escalada, telhado, palmada.
+[OK] 12 casos de colisões de veículos, personagem e geometria.
+[OK] Física estrutural: colisões, blocos e teste de 104 corpos por 600 passos.
+[OK] Sintaxe de todos os arquivos JS, MJS e CJS.
+[OK] Serviço HTTP de index.html, scripts e áudio OGG na porta 8771.
+[OK] Integridade do ZIP, arquivos de áudio e arquivos da campanha.
+
+PENDENTE:
+[ ] Jogabilidade visual completa com WebGL em navegador Windows real.
+[ ] Testar três missões do começo ao fim, derrota e reinício em PC do usuário.
+[ ] Validar FPS e estabilidade em diferentes placas gráficas.
+
+IMPORTANTE:
+O teste de atualização é um teste de código executado em Node.js com
+simulações leves de cena. Não constitui prova de uma partida completa no
+navegador, pois a cópia do Three.js depende de acesso a CDN externo.
+
+V1.5 - MODELO HULK GLB
+- Verificado: GLB v2 com um mesh skinned e 108 joints, 1 textura embutida.
+- Verificado: 2 clips de animacao original no GLB, incluindo idle upright.
+- Adicionados: movimento das pernas/bracos, 2 socos, superpulo,
+  escalada, palma, ataque ao chao, pegar/lancar carro e animacao de furia.
+- O animador usa skeleton bones em tempo real e NAO exporta novos
+  clips/animacoes para dentro do hulk.glb original.
+- Protecao de fallback: GLTFLoader e atualizacao do esqueleto nao
+  podem mais deixar a partida inteira inutilizavel se derem erro.
+- Ainda nao foi possivel confirmar visualmente a qualidade de todas
+  as poses num browser Windows real; teste visual ainda pendente.

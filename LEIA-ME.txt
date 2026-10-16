@@ -1,0 +1,38 @@
+HULK: SMASH CITY v1.5 - MODELO GLB E ANIMACOES
+============================================
+
+NOVO: O personagem principal agora carrega o arquivo original assets/models/hulk.glb
+com material/textura original, skin, esqueleto de 108 articulacoes e duas animacoes
+originais de repouso. A v1.5 inclui animacoes procedurais ADITIVAS no esqueleto
+para locomocao, corrida, soco esquerdo/direito, superpulo (carregamento, subida,
+queda e aterrissagem), escalada, palmada, esmagamento, arremesso e modo furia.
+
+COMO EXECUTAR
+1. Extraia tudo, inclusive assets/models/hulk.glb.
+2. Execute JOGAR-WINDOWS.bat e mantenha a janela do servidor aberta.
+3. No navegador, abra http://127.0.0.1:8775 e clique em INICIAR DESTRUICAO.
+4. Internet necessaria SOMENTE para o Three.js e GLTFLoader (versao 0.186.1).
+   Textura, modelo e todos os 17 audios OGG estao DENTRO do ZIP.
+5. Aguarde a mensagem NOVO HULK 3D ATIVO no menu. Caso o carregamento falhe,
+   o Hulk geometrico anterior fica ativo e o jogo continua funcionando.
+
+CONTROLES
+WASD = mover    SHIFT = correr    F / clique = socar
+SEGURE ESPACO e solte = superpulo (na fachada, ESPACO para saltar da parede)
+C + WASD = escalar e deslocar-se na parede
+X = palmada trovao    Q = mergulho/esmagamento
+E = pegar/arremessar carro    R = modo furia
+Mouse direito = camera    ESC = pausa    M = silenciar
+
+ATENCAO: O modelo traz 2 animacoes de repouso. Os demais movimentos sao
+PROCEDURAIS EM TEMPO REAL (script src/avatar.js / src/avatar-poses.mjs),
+nao sao clips de animacao exportados dentro do GLB original.
+
+DIAGNOSTICO
+Console do navegador: window.__HULK_DIAGNOSTICS()
+Campo avatar.status: ready (GLB carregado), fallback (Hulk antigo ativo).
+Campo avatar.mode mostra o movimento atual da v1.5.
+
+LICENCA E CREDITOS
+Leia CREDITOS-MODELO.txt antes de redistribuir o modelo original.
+Este e um projeto de fa, nao afiliado a Marvel.

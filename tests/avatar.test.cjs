@@ -1,0 +1,30 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const file=fs.readFileSync(path.join(root,'assets/models/hulk.glb'));
+assert.equal(file.toString('ascii',0,4),'glTF','Must be actual binary GLB');
+assert.equal(file.readUInt32LE(4),2,'glTF 2.0 version');
+assert.equal(file.readUInt32LE(8),file.length,'GLB length integrity');
+const len=file.readUInt32LE(12);
+assert.equal(file.toString('ascii',16,20),'JSON');
+const gltf=JSON.parse(file.toString('utf8',20,20+len));
+assert.ok(gltf.nodes.length>110);
+assert.equal(gltf.skins.length,1);
+assert.equal(gltf.skins[0].joints.length,108);
+assert.ok(gltf.images.length>=1,'Texture embedded');
+assert.ok(gltf.images.some(im=>Number.isInteger(im.bufferView)));
+assert.deepEqual(gltf.animations.map(c=>c.name),['Anim_Hulk_Idle_Upright','Anim_Hulk_Shell_Idle']);
+for(const name of ['Hips_','LeftArm_','RightArm_','LeftForeArm_','RightForeArm_','LeftUpLeg_','RightUpLeg_','LeftLeg_','RightLeg_','Spine_','Spine2_','Jaw_','Head_']){
+ assert.ok(gltf.nodes.some(n=>n.name?.startsWith('mixamorig:'+name)),'Missing rig: '+name);
+}
+const index=fs.readFileSync(path.join(root,'index.html'),'utf8');
+assert.match(index,/three\/addons\/.*examples\/jsm\//);
+assert.match(index,/src\/game\.js/);
+assert.match(index,/avatarStatus/);
+const game=fs.readFileSync(path.join(root,'src/game.js'),'utf8');
+assert.match(game,/import\('\.\/avatar\.js'\)/);
+assert.match(game,/newAvatar\.update/);
+assert.match(game,/newAvatar\.showModel\(false\)/);
+console.log('GLB integrity, joint mappings, animation clips, fallback & importmap: OK');

@@ -1,0 +1,16 @@
+ATRIBUICAO DO MODELO 3D HULK (ARQUIVO FORNECIDO PELO USUARIO)
+
+Titulo: Hulk
+Autor: shreyhaldkar0
+Fonte: https://sketchfab.com/3d-models/hulk-96274605878d4a4e9c2b964fd5bd9ee1
+Licenca indicada no metadado do proprio GLB: CC BY 4.0
+Texto da licenca: https://creativecommons.org/licenses/by/4.0/
+
+O modelo foi fornecido pelo usuario e incluído sem substituir a malha,
+a textura, os ossos ou os dois clips de repouso originais. A adaptacao
+para este jogo consiste em escala automatica e animacao aditiva executada
+em tempo real via Three.js; nenhuma reivindicacao de autoria do modelo.
+
+A licenca CC BY exige preservar os creditos e indicar modificacoes.
+A personagem e marca Hulk estao associadas a seus respectivos titulares;
+a disponibilizacao do modelo como CC BY nao constitui licenciamento da marca.
