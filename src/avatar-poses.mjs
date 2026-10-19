@@ -21,7 +21,8 @@ export function avatarPose(a={},s={}){
   const clap=action(a.clapPose||0,.64,.45,.67),clapWind=anticipation(a.clapPose||0,.64);
   const slam=action(a.slamPose||0,.60,.45,.78),slamWind=anticipation(a.slamPose||0,.60);
   const throwing=action(a.throwPose||0,.48,.38,.70);
-  const holding=s.holdingCar?1:0;
+  const holding=s.holdingCar||s.holdingEnemy?1:0;
+  const double=action(a.doubleSmashPose||0,.82,.43,.66),doubleWind=anticipation(a.doubleSmashPose||0,.82);
   const climbing=!!a.climbing;
   const airborne=!a.onGround&&!climbing;
   const rage=(s.rageTime||0)>0;
@@ -43,14 +44,15 @@ export function avatarPose(a={},s={}){
   if(throwing>.05||holding)mode='throw-grab';
   if(slam>.05)mode='ground-smash';
   if(clap>.05)mode='thunderclap';
+  if(double>.05)mode='double-smash';
   if(punch>.05)mode=a.attackHand<0?'left-punch':'right-punch';
   if(rage&&mode==='idle')mode='rage-idle';
   const armL=climbing?-2.10+climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
-    -stride*.37+windLeft*.38-strikeLeft*2.1-slam*1.70+slamWind*.15-clap*1.52+clapWind*.28-throwing*1.25-holding*2.42-charged*.5;
+    -stride*.37+windLeft*.38-strikeLeft*2.1-slam*1.70+slamWind*.15-clap*1.52+clapWind*.28-throwing*1.25-holding*2.42-charged*.5-double*2.1+doubleWind*.32;
   const armR=climbing?-2.10-climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
-    stride*.37+windRight*.38-strikeRight*2.1-slam*1.70+slamWind*.15-clap*1.52+clapWind*.28-throwing*1.15-holding*2.42-charged*.5;
+    stride*.37+windRight*.38-strikeRight*2.1-slam*1.70+slamWind*.15-clap*1.52+clapWind*.28-throwing*1.15-holding*2.42-charged*.5-double*2.1+doubleWind*.32;
   const legL=climbing?(-.48+climbWave*.51):(airborne?-.27-launching*.18+falling*.09:stride*.54);
   const legR=climbing?(-.48-climbWave*.51):(airborne?-.44+falling*.12:-stride*.54);
   return {
@@ -59,22 +61,22 @@ export function avatarPose(a={},s={}){
     knees:[climbing?.62+clamp(-climbWave)*.20:airborne?.72+falling*.12:Math.max(0,-swing)*.73*walking+charged*.86+landing*.28,
            climbing?.62+clamp(climbWave)*.20:airborne?.88+falling*.08:Math.max(0,swing)*.73*walking+charged*.86+landing*.28],
     arms:[armL,armR],
-    forearms:[climbing?-.38-climbWave*.14:.14+windLeft*.25+strikeLeft*.56+clap*.83+charged*.36+holding*.44,
-              climbing?-.38+climbWave*.14:.14+windRight*.25+strikeRight*.56+clap*.83+charged*.36+holding*.44],
+    forearms:[climbing?-.38-climbWave*.14:.14+windLeft*.25+strikeLeft*.56+clap*.83+charged*.36+holding*.44+double*.52,
+              climbing?-.38+climbWave*.14:.14+windRight*.25+strikeRight*.56+clap*.83+charged*.36+holding*.44+double*.52],
     // During the thunderclap the arms converge in front of the chest.
-    spreads:[-.12+clap*.70-clapWind*.30-slam*.22-strikeLeft*.16+holding*.18,
-              .12-clap*.70+clapWind*.30+slam*.22+strikeRight*.16-holding*.18],
+    spreads:[-.12+clap*.70-clapWind*.30-slam*.22-strikeLeft*.16+holding*.18+double*.30,
+              .12-clap*.70+clapWind*.30+slam*.22+strikeRight*.16-holding*.18-double*.30],
     shoulderLift:climbing?.20:clap*.19+slam*.18+punchWind*.07,
-    spineX:climbing?-.26:walking*.095+charged*.30+slam*.30+landing*.23+(airborne?-.16+launching*.10:0),
+    spineX:climbing?-.26:walking*.095+charged*.30+slam*.30+double*.34+landing*.23+(airborne?-.16+launching*.10:0),
     spineY:(strikeRight-strikeLeft)*.38+(windLeft-windRight)*.13+sway*.045,
     spineZ:climbing?0:sway*.045,
     hipsYaw:sway*-.065+(strikeRight-strikeLeft)*-.13,
     hipsY:-charged*.24-landing*.18+(climbing?Math.sin((s.time||0)*17)*.015*moveClimb:Math.sin(gait*2)*.035*walking),
     headX:(a.airSmash?.16:0)+slam*.15+clap*.06-charged*.13-falling*.09,
     headY:(strikeLeft-strikeRight)*.11,
-    jawX:(rage?.16:0)+slam*.19+clap*.22+punch*.065,
-    handCurl:[.19+(strikeLeft+clap+slam+holding+charged)*.24+rage*.08,
-              .19+(strikeRight+clap+slam+holding+charged)*.24+rage*.08],
+    jawX:(rage?.16:0)+slam*.19+clap*.22+punch*.065+double*.11,
+    handCurl:[.19+(strikeLeft+clap+slam+holding+charged+double)*.24+rage*.08,
+              .19+(strikeRight+clap+slam+holding+charged+double)*.24+rage*.08],
     footAngles:[climbing?-.22+climbWave*.24:airborne?-.28+falling*.18:Math.max(0,cos)*.20*walking-charged*.22,
                 climbing?-.22-climbWave*.24:airborne?-.23+falling*.18:Math.max(0,-cos)*.20*walking-charged*.22],
     breath:breathing*.013*(1-clamp(walking*.5)),

@@ -1,0 +1,11 @@
+HULK: SMASH CITY v1.8 — Registro técnico
+
+Alterações: G para agarrar/arremessar inimigos, V para golpe duplo, reação com recuo e atordoamento, arremessos com varredura contínua, poses do novo modelo GLB, HUD e controles atualizados.
+
+Validação automatizada local:
+- node --test tests/*.* : 16/16 testes passaram (12 arquivos de testes)
+- node --check src/game.js src/avatar.js src/avatar-poses.mjs src/combat.mjs : sintaxe válida
+- O teste real de carregamento da malha usa o GLB original de 108 articulações num carregador simulado.
+- Servidor local, rotas HTTP e arquivos binários do modelo e do áudio serão verificados antes da entrega.
+
+Limitações: sem confirmação de partida completa no Windows com GPU/WebGL; física de arremesso aproximada, não é simulador de corpo rígido completo.

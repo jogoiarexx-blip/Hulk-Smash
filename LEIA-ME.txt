@@ -1,45 +1,12 @@
-HULK SMASH CITY v1.7 — IK DE CONTATO
-Escalada: mãos apoiadas na fachada (CCD de 2 elos, limite de alcance e transições suaves); corrida: correção vertical do tornozelo sobre ruas e telhados. Preservados o GLB original, os poderes, a cidade e os áudios.
-Teste gráfico real em Windows/WebGL ainda pendente.
+HULK: SMASH CITY v1.8 — COMBATE AVANÇADO
 
-HULK SMASH CITY v1.6 — ANIMAÇÕES DO MODELO GLB
-Melhorias: corrida, transições suaves, socos com preparação e recuperação, palmada com os braços convergindo, escalada estática e em movimento, salto com subida/queda, aterrissagem e 30 segmentos dos dedos. Modelo original mantido.
+G: Agarrar um tanque ou drone próximo; pressionar G novamente para arremessar.
+V: Golpe pesado com os dois braços, tempo de preparação e recarga.
+E: Pegar/arremessar carros, ou lançar inimigo já agarrado.
+Os inimigos agora reagem ao impacto, sofrem recuo e deixam de atirar enquanto atordoados.
+Arremessos usam trajetória contínua e podem acertar prédios, veículos e outros inimigos.
+Todas as funções anteriores (superpulo, escalada, palmada, fúria, missões e áudio) preservadas.
 
-HULK: SMASH CITY v1.5 - MODELO GLB E ANIMACOES
-============================================
-
-NOVO: O personagem principal agora carrega o arquivo original assets/models/hulk.glb
-com material/textura original, skin, esqueleto de 108 articulacoes e duas animacoes
-originais de repouso. A v1.5 inclui animacoes procedurais ADITIVAS no esqueleto
-para locomocao, corrida, soco esquerdo/direito, superpulo (carregamento, subida,
-queda e aterrissagem), escalada, palmada, esmagamento, arremesso e modo furia.
-
-COMO EXECUTAR
-1. Extraia tudo, inclusive assets/models/hulk.glb.
-2. Execute JOGAR-WINDOWS.bat e mantenha a janela do servidor aberta.
-3. No navegador, abra http://127.0.0.1:8775 e clique em INICIAR DESTRUICAO.
-4. Internet necessaria SOMENTE para o Three.js e GLTFLoader (versao 0.186.1).
-   Textura, modelo e todos os 17 audios OGG estao DENTRO do ZIP.
-5. Aguarde a mensagem NOVO HULK 3D ATIVO no menu. Caso o carregamento falhe,
-   o Hulk geometrico anterior fica ativo e o jogo continua funcionando.
-
-CONTROLES
-WASD = mover    SHIFT = correr    F / clique = socar
-SEGURE ESPACO e solte = superpulo (na fachada, ESPACO para saltar da parede)
-C + WASD = escalar e deslocar-se na parede
-X = palmada trovao    Q = mergulho/esmagamento
-E = pegar/arremessar carro    R = modo furia
-Mouse direito = camera    ESC = pausa    M = silenciar
-
-ATENCAO: O modelo traz 2 animacoes de repouso. Os demais movimentos sao
-PROCEDURAIS EM TEMPO REAL (script src/avatar.js / src/avatar-poses.mjs),
-nao sao clips de animacao exportados dentro do GLB original.
-
-DIAGNOSTICO
-Console do navegador: window.__HULK_DIAGNOSTICS()
-Campo avatar.status: ready (GLB carregado), fallback (Hulk antigo ativo).
-Campo avatar.mode mostra o movimento atual da v1.5.
-
-LICENCA E CREDITOS
-Leia CREDITOS-MODELO.txt antes de redistribuir o modelo original.
-Este e um projeto de fa, nao afiliado a Marvel.
+Como executar: extraia o ZIP e execute JOGAR-WINDOWS.bat; internet necessária para Three.js.
+URL GitHub Pages: https://jogoiarexx-blip.github.io/Hulk-Smash/
+O teste visual completo em Windows/WebGL ainda precisa ser confirmado no PC do usuário.

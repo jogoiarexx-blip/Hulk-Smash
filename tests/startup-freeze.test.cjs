@@ -26,18 +26,18 @@ function contextFactory(){
   leftArm:joint(),rightArm:joint(),leftForearm:joint(),rightForearm:joint(),
   body:joint(),rig:joint(),torso:joint(),head:joint(),jaw:joint(),
   shadow:{position:{y:0},scale:{setScalar(n){this.value=n;}},material:{opacity:1}},
-  attack:0,attackHand:1,pendingPunch:false,pendingClap:false,clapPose:0,slamPose:0,throwPose:0};
+  attack:0,attackHand:1,pendingPunch:false,pendingClap:false,clapPose:0,slamPose:0,doubleSmashPose:0,pendingDoubleSmash:false,grabEnemyPose:0,throwPose:0};
  const keys=new Set(),state={camYaw:0,rageTime:0,time:0};
  const player={position:new Vec()},playerRig={rotation:{y:0}};
  const ctx={Math,keys,state,animation,player,playerRig,playerForward:new Vec(0,0,-1),
-  SETTINGS:{playerRadius:1.26,gravity:37,world:159},holdingCar:null,buildings:[],
+  SETTINGS:{playerRadius:1.26,gravity:37,world:159},holdingCar:null,holdingEnemy:null,buildings:[],
   footsteps:0,smooth:(_,target)=>target,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
   vec:(x=0,y=0,z=0)=>new Vec(x,y,z),
   roofAt:()=>0,solidObstacleList:()=>[],moveCircleSlide:(x,z,dx,dz)=>({x:x+dx,z:z+dz,collisions:0}),
   updateClimb:()=>{},beginClimb:()=>{},findClimbWall:()=>null,
   chargeRatio:v=>Math.min(1,v/1.65), rand:(a,b)=>(a+b)/2, particle:()=>{},
   shouldPlayPunchImpact:(before,after)=>before>.16&&after<=.16,
-  executePunchImpact:()=>punchHits++,thunderclapImpact:()=>clapHits++,
+  executePunchImpact:()=>punchHits++,thunderclapImpact:()=>clapHits++,heavyHitCrossed:(b,a)=>b>.38&&a<=.38,doubleSmashImpact:()=>{},
   landingHeight:()=>null,slam:()=>{},shockRing:()=>{},playSound:()=>{},cameraShake:()=>{}};
  vm.createContext(ctx);vm.runInContext(updateCode+'\nthis.updatePlayer=updatePlayer;',ctx);
  return {ctx,animation,keys,state,player,hits:()=>[punchHits,clapHits]};
