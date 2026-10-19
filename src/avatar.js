@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=1.6';
-import { resolveHulkSkeleton } from './rig-map.mjs?v=1.6';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=1.7';
+import { resolveHulkSkeleton } from './rig-map.mjs?v=1.7';
+import {contactHands,dampWeight,footStance,reachLimit} from './contact-ik.mjs?v=1.7;
 
 // Fully skinned Hulk GLB. Original idle clip plays as a foundation; all additional
 // motions are procedural/additive bone poses driven by the game's existing state.
@@ -18,6 +19,45 @@ function rotateBone(bone,axis,angle,rig){
  qLocal.setFromAxisAngle(worldAxis,angle);
  bone.quaternion.premultiply(qLocal);
 }
+// Constrained two-link CCD acting directly on the GLB's skinned bone chain.
+const ikPivot=new THREE.Vector3(),ikEnd=new THREE.Vector3(),ikGoal=new THREE.Vector3();
+const ikA=new THREE.Vector3(),ikB=new THREE.Vector3(),ikCross=new THREE.Vector3();
+const ikQuat=new THREE.Quaternion(),ikParent=new THREE.Quaternion(),ikWorld=new THREE.Quaternion();
+function aimJoint(joint,tip,target,blend,maxTurn=.22){
+ if(!joint||!tip||blend<=.005)return;
+ joint.updateWorldMatrix(true,true);
+ joint.getWorldPosition(ikPivot);tip.getWorldPosition(ikEnd);
+ ikA.subVectors(ikEnd,ikPivot);ikB.subVectors(target,ikPivot);
+ if(ikA.lengthSq()<1e-6||ikB.lengthSq()<1e-6)return;
+ ikA.normalize();ikB.normalize();
+ const theta=Math.acos(THREE.MathUtils.clamp(ikA.dot(ikB),-1,1));
+ ikCross.crossVectors(ikA,ikB);
+ if(ikCross.lengthSq()<1e-9||theta<1e-4)return;
+ ikCross.normalize();
+ joint.parent.getWorldQuaternion(ikParent);
+ joint.getWorldQuaternion(ikWorld);
+ ikQuat.setFromAxisAngle(ikCross,Math.min(theta*blend,maxTurn));
+ ikWorld.premultiply(ikQuat);
+ joint.quaternion.copy(ikParent.invert().multiply(ikWorld)).normalize();
+ joint.updateWorldMatrix(true,true);
+}
+function solveTwoLink(upper,lower,tip,worldTarget,weight,iterations=3){
+ if(!upper||!lower||!tip||weight<=.005)return;
+ upper.updateWorldMatrix(true,true);
+ const a=upper.getWorldPosition(new THREE.Vector3());
+ const b=lower.getWorldPosition(new THREE.Vector3());
+ const c=tip.getWorldPosition(new THREE.Vector3());
+ const lenA=a.distanceTo(b),lenB=b.distanceTo(c);
+ if(lenA<.03||lenB<.03)return;
+ const direction=worldTarget.clone().sub(a),distance=direction.length();
+ if(distance<.001)return;
+ ikGoal.copy(a).addScaledVector(direction,reachLimit(distance,lenA,lenB)/distance);
+ for(let i=0;i<iterations;i++){
+  aimJoint(lower,tip,ikGoal,weight,.22);
+  aimJoint(upper,tip,ikGoal,weight,.22);
+ }
+}
+
 export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.glb',onStatus=()=>{}}){
  const fullUrl=new URL(url,document.baseURI);
  onStatus('fetch','Lendo hulk.glb (1,08 MB)...');
@@ -53,6 +93,7 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
  const posedBones=[...new Set([...Object.values(bones),...fingers.left,...fingers.right])];
  const baseRot=posedBones.map(b=>b.quaternion.clone()),basePos=posedBones.map(b=>b.position.clone());
  let blendedPose=null;
+ let climbIK=0;const footIK={left:0,right:0};
  const adapter={
   root,mixer,bones,scale,clips:gltf.animations.map(c=>c.name),height:6.15,
   jointCount:skeletonNodes.length,meshCount:meshes.length,vertexCount:meshes.reduce((s,m)=>s+(m.geometry?.getAttribute('position')?.count||0),0),
@@ -91,6 +132,30 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
    rotateBone(bones.rightFoot,'x',-p.knees[1]*.25+p.footAngles[1],rig);
    for(const finger of fingers.left)rotateBone(finger,'x',p.handCurl[0],rig);
    for(const finger of fingers.right)rotateBone(finger,'x',p.handCurl[1],rig);
+   // Hand targets lie on the facade, with a stable rest pose while holding C.
+   const targets=a.climbing?contactHands(s.worldPosition,s.climbFace,s.time||0,a.speed||0):null;
+   climbIK=dampWeight(climbIK,targets?1:0,dt,targets?10:14);
+   if(targets&&climbIK>.01){
+    solveTwoLink(bones.leftArm,bones.leftForearm,bones.leftHand,
+      new THREE.Vector3(targets.left.x,targets.left.y,targets.left.z),climbIK*.76);
+    solveTwoLink(bones.rightArm,bones.rightForearm,bones.rightHand,
+      new THREE.Vector3(targets.right.x,targets.right.y,targets.right.z),climbIK*.76);
+   }
+   // Foot IK uses the already validated ground/roof height of the player.
+   const plant=a.onGround&&!a.climbing&&!a.chargingJump&&(a.speed||0)>.3;
+   for(const side of ['left','right']){
+    const target=plant?footStance(a.walk||0,side,(a.speed||0)/11.5):0;
+    footIK[side]=dampWeight(footIK[side],target,dt,14);
+    if(footIK[side]>.04&&s.worldPosition){
+     const leg=bones[side+'Leg'],knee=bones[side+'Knee'],foot=bones[side+'Foot'];
+     if(leg&&knee&&foot){
+      foot.updateWorldMatrix(true,true);
+      const ankle=foot.getWorldPosition(new THREE.Vector3());
+      const correction=THREE.MathUtils.clamp(s.worldPosition.y+.34-ankle.y,-.65,.65);
+      solveTwoLink(leg,knee,foot,ankle.clone().add(new THREE.Vector3(0,correction,0)),footIK[side]*.56,2);
+     }
+    }
+   }
   }
  };
  rig.add(root);

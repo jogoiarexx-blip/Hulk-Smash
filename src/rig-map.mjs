@@ -5,7 +5,9 @@ export const HULK_BONE_ALIASES=Object.freeze({
  leftForearm:['leftforearm','leftlowerarm'],rightForearm:['rightforearm','rightlowerarm'],
  leftLeg:['leftupleg','leftupperleg','leftthigh'],rightLeg:['rightupleg','rightupperleg','rightthigh'],
  leftKnee:['leftleg','leftcalf','leftshin'],rightKnee:['rightleg','rightcalf','rightshin'],
- leftFoot:['leftfoot'],rightFoot:['rightfoot'],leftShoulder:['leftshoulder'],rightShoulder:['rightshoulder']
+ leftFoot:['leftfoot'],rightFoot:['rightfoot'],
+ leftHand:['lefthand'],rightHand:['righthand'],
+ leftToe:['lefttoeend','lefttoebase','lefttoe'],rightToe:['righttoeend','righttoebase','righttoe'],leftShoulder:['leftshoulder'],rightShoulder:['rightshoulder']
 });
 export const HULK_REQUIRED_BONES=Object.freeze(['hips','spine','head','leftArm','rightArm','leftForearm','rightForearm','leftLeg','rightLeg','leftKnee','rightKnee']);
 export function normalizeBoneName(name){return String(name||'').trim().replace(/^.*[|:/\\]/,'').replace(/^mixamorig[_:\-]*/i,'').replace(/[_-]\d+$/,'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();}

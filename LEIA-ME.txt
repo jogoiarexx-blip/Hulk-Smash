@@ -1,3 +1,7 @@
+HULK SMASH CITY v1.7 — IK DE CONTATO
+Escalada: mãos apoiadas na fachada (CCD de 2 elos, limite de alcance e transições suaves); corrida: correção vertical do tornozelo sobre ruas e telhados. Preservados o GLB original, os poderes, a cidade e os áudios.
+Teste gráfico real em Windows/WebGL ainda pendente.
+
 HULK SMASH CITY v1.6 — ANIMAÇÕES DO MODELO GLB
 Melhorias: corrida, transições suaves, socos com preparação e recuperação, palmada com os braços convergindo, escalada estática e em movimento, salto com subida/queda, aterrissagem e 30 segmentos dos dedos. Modelo original mantido.
 

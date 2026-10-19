@@ -1231,7 +1231,7 @@ function avatarInfo(text,kind='loading'){
 function reloadAvatar(){
  if(avatarRequest)return avatarRequest;
  avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando Hulk 3D...','loading');
- avatarRequest=import('./avatar.js?v=1.6').then(m=>m.loadHulkAvatar({
+ avatarRequest=import('./avatar.js?v=1.7').then(m=>m.loadHulkAvatar({
   rig:playerRig,legacyParts:legacyPartsForAvatar,onStatus:(stage,data)=>{
    if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
   }
@@ -1271,7 +1271,7 @@ function frame(t){
   state.hudTime-=dt;if(state.hudTime<=0){updateHUD();state.hudTime=.13;}
  }
  if(newAvatar && state.mode !== 'paused' && state.mode !== 'error'){
-  try{newAvatar.update(dt,animation,{time:state.time,rageTime:state.rageTime,holdingCar:!!holdingCar});}
+  try{newAvatar.update(dt,animation,{time:state.time,rageTime:state.rageTime,holdingCar:!!holdingCar,worldPosition:player.position,climbFace:animation.climbFace});}
   catch(updateError){
    console.error('Falha na animação do GLB:',updateError);
    avatarError=String(updateError?.stack||updateError?.message||updateError);
@@ -1308,8 +1308,8 @@ function fatal(error,phase='startup'){
 try{
  initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
  updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));
- window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='1.6';
- window.__HULK_DIAGNOSTICS=()=>({version:'1.6',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb'},power:{chargingJump:animation.chargingJump,climbing:animation.climbing},fps:window.__HULK_FPS??null});
+ window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='1.7';
+ window.__HULK_DIAGNOSTICS=()=>({version:'1.7',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb'},power:{chargingJump:animation.chargingJump,climbing:animation.climbing},fps:window.__HULK_FPS??null});
  requestAnimationFrame(frame);
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();
