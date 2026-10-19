@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose, blendAvatarPose } from './avatar-poses.mjs';
-import { resolveHulkSkeleton } from './rig-map.mjs';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=1.6';
+import { resolveHulkSkeleton } from './rig-map.mjs?v=1.6';
 
 // Fully skinned Hulk GLB. Original idle clip plays as a foundation; all additional
 // motions are procedural/additive bone poses driven by the game's existing state.
