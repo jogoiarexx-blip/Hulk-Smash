@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { avatarPose } from './avatar-poses.mjs';
+import { resolveHulkSkeleton } from './rig-map.mjs';
 
 // Fully skinned Hulk GLB. Original idle clip plays as a foundation; all additional
 // motions are procedural/additive bone poses driven by the game's existing state.
@@ -17,67 +18,52 @@ function rotateBone(bone,axis,angle,rig){
  qLocal.setFromAxisAngle(worldAxis,angle);
  bone.quaternion.premultiply(qLocal);
 }
-const aliases={
- hips:'Hips_',spine:'Spine_',spine2:'Spine2_',head:'Head_',jaw:'Jaw_',
- leftArm:'LeftArm_',rightArm:'RightArm_',leftForearm:'LeftForeArm_',rightForearm:'RightForeArm_',
- leftLeg:'LeftUpLeg_',rightLeg:'RightUpLeg_',leftKnee:'LeftLeg_',rightKnee:'RightLeg_',
- leftFoot:'LeftFoot_',rightFoot:'RightFoot_',leftShoulder:'LeftShoulder_',rightShoulder:'RightShoulder_'
-};
-const fingerStem=['HandIndex1_','HandMiddle1_','HandRing1_','HandPinky1_','HandThumb1_'];
-
 export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.glb',onStatus=()=>{}}){
- const loader=new GLTFLoader();
- const gltf=await loader.loadAsync(url);
- if(!gltf.scene)throw new Error('O arquivo GLB não tem uma cena 3D.');
- const root=new THREE.Group();root.name='HulkAvatar_v1_5';root.add(gltf.scene);
+ const fullUrl=new URL(url,document.baseURI);
+ onStatus('fetch','Lendo hulk.glb (1,08 MB)...');
+ const response=await fetch(fullUrl.href,{cache:'no-store'});
+ if(!response.ok)throw Error('GLB HTTP '+response.status+' — '+fullUrl.pathname);
+ const raw=await response.arrayBuffer(),view=new DataView(raw);
+ if(raw.byteLength<20||view.getUint32(0,true)!==0x46546c67||view.getUint32(4,true)!==2||view.getUint32(8,true)!==raw.byteLength)throw Error('Arquivo hulk.glb inválido ou incompleto.');
+ onStatus('parse','Arquivo GLB íntegro ('+(raw.byteLength/1048576).toFixed(2)+' MB). Interpretando textura e esqueleto...');
+ const gltf=await new GLTFLoader().parseAsync(raw,new URL('./',fullUrl.href).href);
+ if(!gltf.scene)throw Error('GLB sem cena tridimensional.');
+ const meshes=[],skeletonNodes=[];
  gltf.scene.traverse(o=>{
-  if(o.isSkinnedMesh||o.isMesh){
-   o.castShadow=true;o.receiveShadow=true;
-   o.frustumCulled=false; // Protect the animated skin from incorrect static bone bounds.
-   if(o.material){for(const m of (Array.isArray(o.material)?o.material:[o.material])){
-    if(m.map)m.map.colorSpace=THREE.SRGBColorSpace;
-    m.needsUpdate=true;
-   }}
+  if(o.isMesh){meshes.push(o);o.visible=true;o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;
+   for(const m of (Array.isArray(o.material)?o.material:[o.material]).filter(Boolean)){if(m.map)m.map.colorSpace=THREE.SRGBColorSpace;m.side=THREE.DoubleSide;m.needsUpdate=true;}
   }
+  if(o.isBone)skeletonNodes.push(o);
  });
- const bones={};
- gltf.scene.traverse(o=>{if(!o.isBone)return;for(const [key,prefix] of Object.entries(aliases)){
-  if(o.name.startsWith('mixamorig:'+prefix))bones[key]=o;
- }});
- for(const [key,prefix] of Object.entries(aliases)){
-  if(!bones[key])throw new Error('O GLB não tem o osso necessário: '+prefix);
- }
- const fingers={left:[],right:[]};
- gltf.scene.traverse(o=>{if(!o.isBone)return;
-  for(const side of ['Left','Right'])if(fingerStem.some(stem=>o.name.startsWith(`mixamorig:${side}${stem}`)))fingers[side.toLowerCase()].push(o);
- });
+ if(!meshes.length)throw Error('GLB sem malhas 3D visíveis.');
+ const {bones,fingers,missing,foundNames}=resolveHulkSkeleton(skeletonNodes);
+ if(missing.length)throw Error('Esqueleto incompatível: faltam '+missing.join(', ')+'. Ossos encontrados: '+skeletonNodes.length+'; exemplos: '+foundNames.slice(0,7).join(', '));
+ onStatus('rig',skeletonNodes.length+' ossos; '+Object.keys(bones).length+' articulações mapeadas.');
  const mixer=new THREE.AnimationMixer(gltf.scene);
  const idle=gltf.animations.find(c=>c.name==='Anim_Hulk_Idle_Upright')||gltf.animations[0];
  if(idle)mixer.clipAction(idle).setLoop(THREE.LoopRepeat).play();
  mixer.update(0);
- root.updateMatrixWorld(true);
- let bounds=new THREE.Box3().setFromObject(gltf.scene);
- const modelHeight=bounds.max.y-bounds.min.y;
- if(!Number.isFinite(modelHeight)||modelHeight<=.01)throw new Error('Dimensões do modelo GLB inválidas.');
- // Auto-normalize the Sketchfab source transform: the model matches the 6.2m character
- // regardless of its internal FBX / Sketchfab transform scale.
- const scale=THREE.MathUtils.clamp(6.15/modelHeight,.06,30);
- const center=bounds.getCenter(new THREE.Vector3());
- root.scale.setScalar(scale);root.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
- root.userData.sourceName='hulk.glb';
- rig.add(root);
- for(const oldPart of legacyParts)oldPart.visible=false;
- let enabled=true,lastMode='idle';
+ gltf.scene.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(gltf.scene),size=bounds.getSize(new THREE.Vector3());
+ if(!Number.isFinite(size.y)||size.y<=.01||!Number.isFinite(size.x))throw Error('Dimensões inválidas no GLB.');
+ const scale=THREE.MathUtils.clamp(6.15/size.y,.06,30),center=bounds.getCenter(new THREE.Vector3());
+ const root=new THREE.Group();root.name='Hulk_GLB_Original';root.userData.sourceName='assets/models/hulk.glb';
+ root.add(gltf.scene);root.scale.setScalar(scale);
+ root.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+ const posedBones=[...new Set([...Object.values(bones),...fingers.left,...fingers.right])];
+ const baseRot=posedBones.map(b=>b.quaternion.clone()),basePos=posedBones.map(b=>b.position.clone());
  const adapter={
-  root,mixer,bones,clips:gltf.animations.map(c=>c.name),scale,height:6.15,
-  get status(){return 'ready';},get mode(){return lastMode;},
-  showModel(value){enabled=!!value;root.visible=enabled;legacyParts.forEach(p=>p.visible=!enabled);},
+  root,mixer,bones,scale,clips:gltf.animations.map(c=>c.name),height:6.15,
+  jointCount:skeletonNodes.length,meshCount:meshes.length,vertexCount:meshes.reduce((s,m)=>s+(m.geometry?.getAttribute('position')?.count||0),0),
+  modelUrl:fullUrl.href,mode:'idle',visible:true,forwardFlip:false,
+  get status(){return 'ready';},
+  showModel(value){this.visible=!!value;root.visible=this.visible;legacyParts.forEach(p=>p.visible=!this.visible);},
+  flipFacing(){this.forwardFlip=!this.forwardFlip;root.rotation.y=this.forwardFlip?Math.PI:0;},
   update(dt,a,s){
-   if(!enabled)return;
-   mixer.update(Math.min(dt,.05)); // Rebuild the original animation pose before each additive overlay.
-   const p=avatarPose(a,s);lastMode=p.mode;
-   // Root locomotion, jump and charge remain controlled by the existing player object.
-   // Only the new GLB skeleton gets these offsets; hitboxes stay unchanged.
+   if(!this.visible)return;
+   posedBones.forEach((b,i)=>{b.quaternion.copy(baseRot[i]);b.position.copy(basePos[i]);});
+   mixer.update(Math.min(dt,.05));
+   const p=avatarPose(a,s);this.mode=p.mode;
    bones.hips.position.y+=p.hipsY/scale/1.91;
    rotateBone(bones.spine,'x',p.spineX*.63,rig);
    rotateBone(bones.spine2,'x',p.spineX*.45,rig);
@@ -103,6 +89,9 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
    for(const finger of fingers.right)rotateBone(finger,'x',p.handCurl[1],rig);
   }
  };
+ rig.add(root);
+ gltf.scene.updateMatrixWorld(true);
+ adapter.showModel(true);
  onStatus('ready',adapter);
  return adapter;
 }

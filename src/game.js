@@ -21,7 +21,8 @@ const stages = [
  {title:'FÚRIA IMPARÁVEL',buildings:28,kills:32}
 ];
 let renderer, scene, camera, player, playerRig, animation;
-let newAvatar=null,avatarState='loading';
+let newAvatar=null,avatarState='loading',avatarError='',avatarRequest=null;
+const legacyPartsForAvatar=[];
 const audio=new AudioEngine();
 let footsteps=0, qualityClock=0, fpsClock=0, frameAccumulator=0, frameSamples=0;
 let particles=[], debris=[], structures=[], effects=[], buildings=[], enemies=[], cars=[], projectiles=[], decorations=[];
@@ -1182,7 +1183,7 @@ function wireInput(){
   if(e.repeat)return;
   if(e.code==='Escape'||e.code==='KeyP'){if(state.mode==='playing'||state.mode==='paused')togglePause();else if(state.mode==='menu')$('modal').classList.add('hidden');return;}
   if(state.mode!=='playing')return;
-  if(e.code==='Space')beginJumpCharge();if(e.code==='KeyQ')airSlam();if(e.code==='KeyX')thunderclap();if(e.code==='KeyF')punch();if(e.code==='KeyE')handleCarAction();if(e.code==='KeyR')roar();
+  if(e.code==='Space')beginJumpCharge();if(e.code==='KeyQ')airSlam();if(e.code==='KeyX')thunderclap();if(e.code==='KeyF')punch();if(e.code==='KeyE')handleCarAction();if(e.code==='KeyR')roar();if(e.code==='F7'){avatarCompare();return;}
   if(e.code==='KeyM'){state.soundOn=!state.soundOn;audio.setMuted(!state.soundOn);updateAudioButtons();notify(state.soundOn?'SOM ATIVADO':'SOM DESATIVADO');}
  });
  window.addEventListener('keyup',e=>{keys.delete(e.code);if(e.code==='Space')releaseJumpCharge();});
@@ -1201,6 +1202,9 @@ function wireInput(){
  });
  renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();state.camDist=clamp(state.camDist+e.deltaY*.024,14,42);},{passive:false});
  $('startButton').addEventListener('click',startGame);
+ $('avatarRetry').addEventListener('click',reloadAvatar);
+ $('avatarCompare').addEventListener('click',avatarCompare);
+ $('avatarFlip').addEventListener('click',()=>{if(newAvatar){newAvatar.flipFacing();notify('ORIENTAÇÃO DO HULK INVERTIDA',1.3);}});
  $('howButton').addEventListener('click',setModalHow);
  $('resumeButton').addEventListener('click',resumeGame);
  $('restartButton').addEventListener('click',()=>{startGame();});
@@ -1214,6 +1218,41 @@ function updateAudioButtons(){
  $('soundToggle').setAttribute('aria-pressed',String(state.soundOn));
  $('musicToggle').textContent=audio.musicEnabled?'♫ MÚSICA: LIGADA':'♫ MÚSICA: DESLIGADA';
  $('musicToggle').setAttribute('aria-pressed',String(audio.musicEnabled));
+}
+function avatarInfo(text,kind='loading'){
+ const status=$('avatarStatus'),display=$('avatarLive'),detail=$('avatarDetail');
+ if(status)status.textContent=text;
+ if(display){display.textContent=text;display.dataset.state=kind;}
+ if(detail)detail.textContent=kind==='error'?avatarError:kind==='ready'?String(newAvatar?.meshCount||0)+' malha(s) • '+String(newAvatar?.jointCount||0)+' ossos • assets/models/hulk.glb':'';
+ $('avatarRetry').hidden=kind!=='error';$('avatarCompare').hidden=kind!=='ready';$('avatarFlip').hidden=kind!=='ready';
+ $('startButton').disabled=kind==='loading';
+ $('startButton').textContent=kind==='loading'?'CARREGANDO MODELO 3D...':'▶ INICIAR DESTRUIÇÃO';
+}
+function reloadAvatar(){
+ if(avatarRequest)return avatarRequest;
+ avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando Hulk 3D...','loading');
+ avatarRequest=import('./avatar.js?v=1.5.2').then(m=>m.loadHulkAvatar({
+  rig:playerRig,legacyParts:legacyPartsForAvatar,onStatus:(stage,data)=>{
+   if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
+  }
+ })).then(adapter=>{
+  if(newAvatar&&newAvatar!==adapter)newAvatar.root.removeFromParent();
+  newAvatar=adapter;avatarState='ready';avatarError='';
+  avatarInfo('✓ MODELO HULK.GLB CARREGADO E VISÍVEL','ready');
+  return adapter;
+ }).catch(error=>{
+  avatarState='error';avatarError=String(error?.stack||error?.message||error);
+  console.error('Falha ao carregar hulk.glb:',error);
+  avatarInfo('✕ FALHA NO HULK.GLB — VEJA O DETALHE / TENTE NOVAMENTE','error');
+  return null;
+ }).finally(()=>{avatarRequest=null;});
+ return avatarRequest;
+}
+function avatarCompare(){
+ if(!newAvatar)return;
+ newAvatar.showModel(!newAvatar.visible);
+ avatarInfo(newAvatar.visible?'✓ MODELO HULK.GLB CARREGADO E VISÍVEL':'⚠ COMPARAÇÃO: HULK ANTIGO ATIVO','ready');
+ $('avatarCompare').textContent=newAvatar.visible?'VER ORIGINAL ANTIGO':'VOLTAR AO HULK.GLB';
 }
 function initAudio(){audio.start().catch(err=>console.warn('Falha inicializando áudio:',err));}
 function playSound(kind,amount=1,pan=0){if(!state.soundOn)return;audio.play(kind,amount,pan);}
@@ -1233,10 +1272,11 @@ function frame(t){
  }
  if(newAvatar && state.mode !== 'paused' && state.mode !== 'error'){
   try{newAvatar.update(dt,animation,{time:state.time,rageTime:state.rageTime,holdingCar:!!holdingCar});}
-  catch(avatarError){
-   console.error('Falha na animação do GLB; personagem original restaurado:',avatarError);
-   newAvatar.showModel(false);newAvatar=null;avatarState='fallback';
-   const status=$('avatarStatus');if(status)status.textContent='HULK ORIGINAL REATIVADO — PROBLEMA NO MODELO 3D';
+  catch(updateError){
+   console.error('Falha na animação do GLB:',updateError);
+   avatarError=String(updateError?.stack||updateError?.message||updateError);
+   newAvatar.showModel(false);newAvatar.root.removeFromParent();newAvatar=null;avatarState='error';
+   avatarInfo('✕ ERRO NA ANIMAÇÃO GLB — CONSULTE O DIAGNÓSTICO','error');
   }
  }
  updateCamera(dt);
@@ -1267,13 +1307,10 @@ function fatal(error,phase='startup'){
 }
 try{
  initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='1.5';
- window.__HULK_DIAGNOSTICS=()=>({version:'1.5',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',bones:newAvatar?Object.keys(newAvatar.bones).length:0,clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
- // Optional asynchronous avatar upgrade. Errors leave the original fully-playable character intact.
- const legacyParts=[...playerRig.children];
- import('./avatar.js').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts,
-  onStatus:(_,avatar)=>{newAvatar=avatar;avatarState='ready';const status=$('avatarStatus');if(status)status.textContent='✓ NOVO HULK 3D ATIVO • ANIMAÇÕES ARTICULADAS';}
- })).catch(error=>{avatarState='fallback';console.warn('O novo modelo não carregou; usando Hulk antigo:',error);
-  const status=$('avatarStatus');if(status)status.textContent='MODELO ORIGINAL ATIVO • DETALHADO NÃO CARREGOU';
- });
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));
+ window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='1.5.2';
+ window.__HULK_DIAGNOSTICS=()=>({version:'1.5.2',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb'},power:{chargingJump:animation.chargingJump,climbing:animation.climbing},fps:window.__HULK_FPS??null});
+ requestAnimationFrame(frame);
+ legacyPartsForAvatar.push(...playerRig.children);
+ reloadAvatar();
 }catch(error){fatal(error);}
