@@ -31,5 +31,5 @@ assert.match(avatar,/const baseRot=/);
 assert.match(avatar,/adapter\.showModel\(true\)/);
 assert.match(avatar,/onStatus\('ready',adapter\)/);
 assert.match(avatar,/legacyParts\.forEach\(p=>p\.visible=!this\.visible\)/);
-assert.match(get('JOGAR-WINDOWS.bat'),/127\.0\.0\.1:8783/);
+assert.match(get('JOGAR-WINDOWS.bat'),/127\.0\.0\.1:8784/);
 console.log(`v1.5.2: GLB original SHA-256 ${checksum}, 108 joints, 2 animations, checked loader, diagnostics, retry & controls: OK`);

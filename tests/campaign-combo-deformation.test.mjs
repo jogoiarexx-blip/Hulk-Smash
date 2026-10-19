@@ -5,23 +5,23 @@ import {CAMPAIGN,chapterComplete,chapterProgress} from '../src/campaign.mjs';
 import {nextChainStep,chainMultiplier,clapImpactTimerCrossed,throwLiftProgress} from '../src/combo.mjs';
 import {dentValue,dentPose,applyCarDamage} from '../src/deformation.mjs';
 
-test('Six campaign chapters include reachable goals and distinct missions',()=>{
+test('Six different playable encounter types replace generic destruction quotas',()=>{
  assert.equal(CAMPAIGN.length,6);
- const minBuildings=58; // City generator has 64 blocks with exactly 6 reserved parks.
- assert.ok(CAMPAIGN.at(-1).buildings<=minBuildings);
- assert.deepEqual(CAMPAIGN.map(x=>x.title).slice(3),['COMBOS DEVASTADORES','ARMAS IMPROVISADAS','TROVÃO FINAL']);
+ assert.deepEqual(CAMPAIGN.map(x=>x.kind),['jammers','convoy','defense','rooftops','boss','reactor']);
+ assert.equal(new Set(CAMPAIGN.map(x=>x.tip)).size,6);
+ const samples=[
+  {completed:3},{completed:3},{held:28,integrity:70},{completed:3},
+  {shieldsBroken:2,bossDead:true,bossHealth:0,bossMaxHealth:780},
+  {capacitorsBroken:3,coreDead:true,timeLeft:15}
+ ];
  for(let i=0;i<CAMPAIGN.length;i++){
-  const goal=CAMPAIGN[i];
-  assert.equal(chapterComplete(goal,{buildings:goal.buildings-1,kills:100,comboFinishers:100,throws:100,claps:100}),false);
-  const stats={...goal,claps:goal.claps||0,throws:goal.throws||0,comboFinishers:goal.comboFinishers||0};
-  assert.equal(chapterComplete(goal,stats),true);
-  assert.equal(chapterProgress(goal,stats).fraction,1);
-  assert.ok(chapterProgress(goal,{buildings:0,kills:0}).fraction<1);
-  assert.ok(goal.wave>=0);
+  const m=CAMPAIGN[i];assert.ok(m.wave>=0);assert.equal(chapterComplete(m,samples[i]),true,m.kind);
+  assert.equal(chapterProgress(m,samples[i]).fraction,1,m.kind);
+  assert.ok(chapterProgress(m,{}).fraction<1,m.kind);
  }
- assert.equal(chapterComplete(CAMPAIGN[3],{buildings:35,kills:44,comboFinishers:1}),false);
- assert.equal(chapterComplete(CAMPAIGN[4],{buildings:43,kills:57,throws:1}),false);
- assert.equal(chapterComplete(CAMPAIGN[5],{buildings:51,kills:72,claps:2}),false);
+ assert.equal(chapterComplete(CAMPAIGN[2],{held:28,integrity:0}),false);
+ assert.equal(chapterComplete(CAMPAIGN[4],{shieldsBroken:1,bossDead:true}),false);
+ assert.equal(chapterComplete(CAMPAIGN[5],{capacitorsBroken:3,coreDead:true,timeLeft:0}),false);
 });
 test('Combos 1→2→3, reset after timeout and power scaling',()=>{
  assert.equal(nextChainStep(0,0),1);
@@ -68,6 +68,6 @@ test('Integration: counters, pulse, articulated lift and HUD exist',()=>{
  const h=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  for(const str of ['function updateHeldEnemy','function dentCar','function createClapShock','state.comboFinishers++','state.throws++','state.claps++','state.chainStep=nextChainStep','chapterComplete(stage','chapterProgress(stage','animation.clapPose=.88'])assert.ok(s.includes(str),str);
  for(const id of ['chainStatus','clapStatus','missionProgress','objectiveFill','avatarPanel'])assert.ok(h.includes('id="'+id+'"'),id);
- assert.ok(h.includes('src/game.js?v=1.9'));
- assert.ok(s.includes("import('./avatar.js?v=1.9')"));
+ assert.ok(h.includes('src/game.js?v=2.0'));
+ assert.ok(s.includes("import('./avatar.js?v=2.0')"));
 });

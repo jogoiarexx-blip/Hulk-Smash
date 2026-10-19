@@ -1,15 +1,11 @@
-HULK: SMASH CITY v1.9 — COMBATE, DEFORMAÇÃO E CAMPANHA
+HULK: SMASH CITY v2.0 — CAMPANHA COM OBJETIVOS REAIS
 
-Seis fases na mesma cidade, com ondas maiores, objetivos de combos, arremessos e palmadas.
-F/CLIQUE: encaixe três socos rapidamente; terceiro golpe causa impacto aumentado.
-G: agarrar tanque/drone, esperar ser levantado e G novamente para arremessar.
-X: Palmada Trovão de maior alcance e nova onda de pressão visível.
-Carros agora se amassam progressivamente; tanques sofrem deformação de blindagem.
-E: agarrar e arremessar veículos. V: golpe duplo. C: escalada. Espaço: superpulo.
-O GLB fornecido pelo usuário e os 17 efeitos sonoros permanecem no pacote.
+Campanha: 1) Sinal na Cidade — destrua 3 bloqueadores de ruas; 2) Comboio Blindado — pare 3 caminhões em movimento; 3) Último Abrigo — defenda por 28 segundos; 4) Caçada nos Telhados — escale até os repetidores; 5) Colosso de Aço — desative escudos e derrote o chefe; 6) Núcleo de Sobrecarga — destrua 3 capacitores e o núcleo antes do tempo acabar.
 
-JOGAR-WINDOWS.bat usa http://127.0.0.1:8783. Precisa de Node.js ou Python e internet
-para o Three.js/CDN. O arquivo GLB e áudio são locais.
+Marcadores visuais e minimapa; animação de soco finalizador e reação ao dano. Preserva Hulk GLB do usuário, poderes, escalada, carros, áudio.
 
-Validação: testes unitários e de integração de código; partida real WebGL ainda depende de confirmação.
-Physics: deformação visual estilizada; não é simulação de malha deformável ou motor rígido completo.
+Referências estudadas: Three.js CCDIKSolver e SkeletonUtils (MIT); Yuka FSM/steering (MIT). Sem incorporar novos arquivos externos ou novas dependências.
+
+Execute JOGAR-WINDOWS.bat. Three.js usa CDN e requer conexão.
+
+Teste de navegador Windows/WebGL completo não foi certificado.

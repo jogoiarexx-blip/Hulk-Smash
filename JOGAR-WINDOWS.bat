@@ -16,13 +16,13 @@ if %errorlevel% equ 0 (
 where py >nul 2>nul
 if %errorlevel% equ 0 (
   echo Iniciando servidor em Python...
-  start "Servidor Hulk - NAO FECHE DURANTE O JOGO" cmd /k "py -m http.server 8783 --bind 127.0.0.1"
+  start "Servidor Hulk - NAO FECHE DURANTE O JOGO" cmd /k "py -m http.server 8784 --bind 127.0.0.1"
   goto :openBrowser
 )
 where python >nul 2>nul
 if %errorlevel% equ 0 (
   echo Iniciando servidor em Python...
-  start "Servidor Hulk - NAO FECHE DURANTE O JOGO" cmd /k "python -m http.server 8783 --bind 127.0.0.1"
+  start "Servidor Hulk - NAO FECHE DURANTE O JOGO" cmd /k "python -m http.server 8784 --bind 127.0.0.1"
   goto :openBrowser
 )
 echo Node.js ou Python nao encontrados.
@@ -32,10 +32,10 @@ pause
 exit /b
 :openBrowser
 timeout /t 2 /nobreak >nul
-start "" "http://127.0.0.1:8783"
+start "" "http://127.0.0.1:8784"
 echo.
 echo Servidor iniciado em outra janela.
 echo Mantenha a janela do servidor aberta enquanto jogar.
 echo O Three.js precisa de internet para carregar.
-echo ATENCAO: esta versao usa a porta 8783 para evitar abrir o servidor antigo.
+echo ATENCAO: esta versao usa a porta 8784 para evitar abrir o servidor antigo.
 pause

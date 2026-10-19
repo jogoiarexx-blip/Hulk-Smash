@@ -17,7 +17,10 @@ const anticipation=(remaining,duration)=>{
 export function avatarPose(a={},s={}){
   const walking=clamp((a.speed||0)/11.5,0,1.55);
   const charged=a.chargingJump?clamp((a.jumpCharge||0)/1.65):0;
-  const punch=action(a.attack||0,.36,.43,.61)*(1+(Math.max(1,Math.min(3,a.comboStep||1))-1)*.11),punchWind=anticipation(a.attack||0,.36);
+  const combo=clamp(a.comboStep||1,1,3);
+  const punch=action(a.attack||0,.36,.40,.61)*(1+(combo-1)*.16),punchWind=anticipation(a.attack||0,.36);
+  const recoil=action(a.hitReact||0,.46,.20,.78);
+  const powerStance=(combo===3?1:0)*punch;
   const clap=action(a.clapPose||0,.88,.50,.75),clapWind=anticipation(a.clapPose||0,.88);
   const slam=action(a.slamPose||0,.60,.45,.78),slamWind=anticipation(a.slamPose||0,.60);
   const throwing=action(a.throwPose||0,.48,.38,.70);
@@ -47,7 +50,8 @@ export function avatarPose(a={},s={}){
   if(slam>.05)mode='ground-smash';
   if(clap>.05)mode='thunderclap';
   if(double>.05)mode='double-smash';
-  if(punch>.05)mode=a.attackHand<0?'left-punch':'right-punch';
+  if(punch>.05)mode=combo===3?'finisher':a.attackHand<0?'left-punch':'right-punch';
+  if(recoil>.08)mode='hit-react';
   if(rage&&mode==='idle')mode='rage-idle';
   const armL=climbing?-2.10+climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
@@ -55,8 +59,8 @@ export function avatarPose(a={},s={}){
   const armR=climbing?-2.10-climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
     stride*.37+windRight*.38-strikeRight*2.1-slam*1.70+slamWind*.15-clap*1.80+clapWind*.47-throwing*1.15-holding*(s.holdingEnemy?(1.12+lift*1.40):2.42)+grabWind*.28-charged*.5-double*2.1+doubleWind*.32;
-  const legL=climbing?(-.48+climbWave*.51):(airborne?-.27-launching*.18+falling*.09:stride*.54);
-  const legR=climbing?(-.48-climbWave*.51):(airborne?-.44+falling*.12:-stride*.54);
+  const legL=climbing?(-.48+climbWave*.51):(airborne?-.27-launching*.18+falling*.09:stride*.54-powerStance*.22-recoil*.19);
+  const legR=climbing?(-.48-climbWave*.51):(airborne?-.44+falling*.12:-stride*.54-powerStance*.20-recoil*.19);
   return {
     mode,walking,charged,punch,clap,slam,rage,
     legs:[legL,legR],
@@ -68,15 +72,15 @@ export function avatarPose(a={},s={}){
     // During the thunderclap the arms converge in front of the chest.
     spreads:[-.12+clap*.91-clapWind*.47-slam*.22-strikeLeft*.16+holding*.18+double*.30,
               .12-clap*.91+clapWind*.47+slam*.22+strikeRight*.16-holding*.18-double*.30],
-    shoulderLift:climbing?.20:clap*.19+slam*.18+punchWind*.07,
-    spineX:climbing?-.26:walking*.095+(s.holdingEnemy?(1-lift)*.31:0)+charged*.30+slam*.30+double*.34+landing*.23+(airborne?-.16+launching*.10:0),
-    spineY:(strikeRight-strikeLeft)*.38+(windLeft-windRight)*.13+sway*.045,
-    spineZ:climbing?0:sway*.045,
+    shoulderLift:climbing?.20:clap*.19+slam*.18+punchWind*.10+recoil*.25,
+    spineX:climbing?-.26:recoil*-.43+walking*.095+(s.holdingEnemy?(1-lift)*.31:0)+charged*.30+slam*.30+double*.34+landing*.23+(airborne?-.16+launching*.10:0),
+    spineY:(strikeRight-strikeLeft)*(.34+combo*.055)+recoil*.14+(windLeft-windRight)*.13+sway*.045,
+    spineZ:climbing?0:sway*.045+recoil*.13,
     hipsYaw:sway*-.065+(strikeRight-strikeLeft)*-.13,
-    hipsY:-charged*.24-landing*.18-(s.holdingEnemy?(1-lift)*.13:0)+(climbing?Math.sin((s.time||0)*17)*.015*moveClimb:Math.sin(gait*2)*.035*walking),
-    headX:(a.airSmash?.16:0)+slam*.15+clap*.06-charged*.13-falling*.09,
+    hipsY:-charged*.24-landing*.18-powerStance*.13-recoil*.09-(s.holdingEnemy?(1-lift)*.13:0)+(climbing?Math.sin((s.time||0)*17)*.015*moveClimb:Math.sin(gait*2)*.035*walking),
+    headX:recoil*-.20+(a.airSmash?.16:0)+slam*.15+clap*.06-charged*.13-falling*.09,
     headY:(strikeLeft-strikeRight)*.11,
-    jawX:(rage?.16:0)+slam*.19+clap*.22+punch*.065+double*.11,
+    jawX:recoil*.24+(rage?.16:0)+slam*.19+clap*.22+punch*.065+double*.11,
     handCurl:[.19+(strikeLeft+clap+slam+holding+charged+double)*.24+rage*.08,
               .19+(strikeRight+clap+slam+holding+charged+double)*.24+rage*.08],
     footAngles:[climbing?-.22+climbWave*.24:airborne?-.28+falling*.18:Math.max(0,cos)*.20*walking-charged*.22,
@@ -89,7 +93,7 @@ export function avatarPose(a={},s={}){
 // every frame uses original idle animation + a blended additive procedural pose.
 export function blendAvatarPose(previous,target,dt){
   if(!previous||!(dt>0))return target;
-  const combat=/punch|clap|smash|thunderclap|throw-grab|tank-lift/.test(target.mode);
+  const combat=/punch|finisher|hit-react|clap|smash|thunderclap|throw-grab|tank-lift/.test(target.mode);
   const climbing=target.mode.startsWith('climb');
   const speed=combat?20:climbing?11:(target.walking>.1?12:8);
   const alpha=1-Math.exp(-clamp(dt,0,.08)*speed);
