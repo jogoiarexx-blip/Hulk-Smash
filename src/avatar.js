@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=1.8';
-import { resolveHulkSkeleton } from './rig-map.mjs?v=1.8';
-import { contactHands, dampWeight, footStance, reachLimit } from './contact-ik.mjs?v=1.8';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=1.9';
+import { resolveHulkSkeleton } from './rig-map.mjs?v=1.9';
+import { contactHands, dampWeight, footStance, reachLimit } from './contact-ik.mjs?v=1.9';
 
 // Loads and validates the *actual bundled* GLB before swapping out the legacy mesh.
 // Failures are propagated to the game UI. Never report success for just finding the file.

@@ -24,7 +24,7 @@ assert.match(index,/three\/addons\/.*examples\/jsm\//);
 assert.match(index,/src\/game\.js/);
 assert.match(index,/avatarStatus/);
 const game=fs.readFileSync(path.join(root,'src/game.js'),'utf8');
-assert.match(game,/import\('\.\/avatar\.js(?:\?v=1\.8)?'\)/);
+assert.match(game,/import\('\.\/avatar\.js(?:\?v=1\.9)?'\)/);
 assert.match(game,/newAvatar\.update/);
 assert.match(game,/newAvatar\.showModel\(false\)/);
 console.log('GLB integrity, joint mappings, animation clips, fallback & importmap: OK');

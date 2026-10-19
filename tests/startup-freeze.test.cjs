@@ -37,7 +37,7 @@ function contextFactory(){
   updateClimb:()=>{},beginClimb:()=>{},findClimbWall:()=>null,
   chargeRatio:v=>Math.min(1,v/1.65), rand:(a,b)=>(a+b)/2, particle:()=>{},
   shouldPlayPunchImpact:(before,after)=>before>.16&&after<=.16,
-  executePunchImpact:()=>punchHits++,thunderclapImpact:()=>clapHits++,heavyHitCrossed:(b,a)=>b>.38&&a<=.38,doubleSmashImpact:()=>{},
+  executePunchImpact:()=>punchHits++,thunderclapImpact:()=>clapHits++,heavyHitCrossed:(b,a)=>b>.38&&a<=.38,clapImpactTimerCrossed:(b,a,at)=>b>at&&a<=at,doubleSmashImpact:()=>{},
   landingHeight:()=>null,slam:()=>{},shockRing:()=>{},playSound:()=>{},cameraShake:()=>{}};
  vm.createContext(ctx);vm.runInContext(updateCode+'\nthis.updatePlayer=updatePlayer;',ctx);
  return {ctx,animation,keys,state,player,hits:()=>[punchHits,clapHits]};
@@ -52,7 +52,7 @@ assert.doesNotThrow(()=>t.ctx.updatePlayer(.016),'In-air animation');
 t.animation.climbing=true;t.animation.jumpVelocity=0;
 assert.doesNotThrow(()=>t.ctx.updatePlayer(.016),'Climbing animation');
 t.animation.climbing=false;t.animation.pendingPunch=true;t.animation.attack=.17;
-t.animation.pendingClap=true;t.animation.clapPose=.32;
+t.animation.pendingClap=true;t.animation.clapPose=.44;
 assert.doesNotThrow(()=>t.ctx.updatePlayer(.02),'Punch / clap hit frames');
 assert.deepEqual(t.hits(),[1,1]);
 for(let i=0;i<200;i++)t.ctx.updatePlayer(.016);

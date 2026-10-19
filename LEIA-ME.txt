@@ -1,12 +1,15 @@
-HULK: SMASH CITY v1.8 — COMBATE AVANÇADO
+HULK: SMASH CITY v1.9 — COMBATE, DEFORMAÇÃO E CAMPANHA
 
-G: Agarrar um tanque ou drone próximo; pressionar G novamente para arremessar.
-V: Golpe pesado com os dois braços, tempo de preparação e recarga.
-E: Pegar/arremessar carros, ou lançar inimigo já agarrado.
-Os inimigos agora reagem ao impacto, sofrem recuo e deixam de atirar enquanto atordoados.
-Arremessos usam trajetória contínua e podem acertar prédios, veículos e outros inimigos.
-Todas as funções anteriores (superpulo, escalada, palmada, fúria, missões e áudio) preservadas.
+Seis fases na mesma cidade, com ondas maiores, objetivos de combos, arremessos e palmadas.
+F/CLIQUE: encaixe três socos rapidamente; terceiro golpe causa impacto aumentado.
+G: agarrar tanque/drone, esperar ser levantado e G novamente para arremessar.
+X: Palmada Trovão de maior alcance e nova onda de pressão visível.
+Carros agora se amassam progressivamente; tanques sofrem deformação de blindagem.
+E: agarrar e arremessar veículos. V: golpe duplo. C: escalada. Espaço: superpulo.
+O GLB fornecido pelo usuário e os 17 efeitos sonoros permanecem no pacote.
 
-Como executar: extraia o ZIP e execute JOGAR-WINDOWS.bat; internet necessária para Three.js.
-URL GitHub Pages: https://jogoiarexx-blip.github.io/Hulk-Smash/
-O teste visual completo em Windows/WebGL ainda precisa ser confirmado no PC do usuário.
+JOGAR-WINDOWS.bat usa http://127.0.0.1:8783. Precisa de Node.js ou Python e internet
+para o Three.js/CDN. O arquivo GLB e áudio são locais.
+
+Validação: testes unitários e de integração de código; partida real WebGL ainda depende de confirmação.
+Physics: deformação visual estilizada; não é simulação de malha deformável ou motor rígido completo.
