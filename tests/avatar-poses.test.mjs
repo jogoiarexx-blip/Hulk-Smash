@@ -11,13 +11,14 @@ assert.equal(avatarPose({...base(),attack:.18,attackHand:1},s).mode,'right-punch
 assert.equal(avatarPose({...base(),clapPose:.32},s).mode,'thunderclap');
 assert.equal(avatarPose({...base(),slamPose:.30},s).mode,'ground-smash');
 assert.equal(avatarPose({...base(),chargingJump:true,jumpCharge:1.5},s).mode,'super-jump-charge');
-assert.equal(avatarPose({...base(),climbing:true},s).mode,'climb');
+assert.equal(avatarPose({...base(),climbing:true},s).mode,'climb-hold');
+assert.equal(avatarPose({...base(),climbing:true,speed:3},s).mode,'climb');
 assert.equal(avatarPose({...base(),onGround:false,airSmash:true},s).mode,'air-smash');
 assert.equal(avatarPose({...base(),onGround:false},s).mode,'jump');
 assert.equal(avatarPose({...base(),throwPose:.24},s).mode,'throw-grab');
 assert.equal(avatarPose(base(),{...s,rageTime:5}).mode,'rage-idle');
 assert.ok(avatarPose({...base(),attack:.18,attackHand:1},s).arms[1]<-1.0);
-assert.ok(avatarPose({...base(),clapPose:.32},s).spreads[0]<-.8);
+assert.ok(avatarPose({...base(),clapPose:.32},s).spreads[0]>.45);
 for(let i=0;i<1200;i++){
  const a={...base(),speed:Math.random()*20,walk:Math.random()*30,attack:Math.random()*.36,clapPose:Math.random()*.64,slamPose:Math.random()*.6,jumpCharge:Math.random()*2,chargingJump:Math.random()>.5,onGround:Math.random()>.5,climbing:Math.random()>.5};
  const p=avatarPose(a,{...s,time:i/60});

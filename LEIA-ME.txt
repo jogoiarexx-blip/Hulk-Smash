@@ -1,3 +1,6 @@
+HULK SMASH CITY v1.6 — ANIMAÇÕES DO MODELO GLB
+Melhorias: corrida, transições suaves, socos com preparação e recuperação, palmada com os braços convergindo, escalada estática e em movimento, salto com subida/queda, aterrissagem e 30 segmentos dos dedos. Modelo original mantido.
+
 HULK: SMASH CITY v1.5 - MODELO GLB E ANIMACOES
 ============================================
 

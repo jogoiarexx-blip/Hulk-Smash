@@ -16,7 +16,7 @@ export function resolveHulkSkeleton(objects){
  for(const node of objects){if(!node?.isBone)continue;foundNames.push(node.name);
   const name=normalizeBoneName(node.name),role=lookup.get(name);
   if(role&&!bones[role])bones[role]=node;
-  for(const side of ['left','right'])if(new RegExp('^'+side+'hand(index|middle|ring|pinky|thumb)1$').test(name))fingers[side].push(node);
+  for(const side of ['left','right'])if(new RegExp('^'+side+'hand(index|middle|ring|pinky|thumb)[123]$').test(name))fingers[side].push(node);
  }
  return {bones,fingers,missing:HULK_REQUIRED_BONES.filter(role=>!bones[role]),foundNames};
 }

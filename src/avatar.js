@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose } from './avatar-poses.mjs';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs';
 import { resolveHulkSkeleton } from './rig-map.mjs';
 
 // Fully skinned Hulk GLB. Original idle clip plays as a foundation; all additional
@@ -52,6 +52,7 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
  root.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
  const posedBones=[...new Set([...Object.values(bones),...fingers.left,...fingers.right])];
  const baseRot=posedBones.map(b=>b.quaternion.clone()),basePos=posedBones.map(b=>b.position.clone());
+ let blendedPose=null;
  const adapter={
   root,mixer,bones,scale,clips:gltf.animations.map(c=>c.name),height:6.15,
   jointCount:skeletonNodes.length,meshCount:meshes.length,vertexCount:meshes.reduce((s,m)=>s+(m.geometry?.getAttribute('position')?.count||0),0),
@@ -63,13 +64,16 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
    if(!this.visible)return;
    posedBones.forEach((b,i)=>{b.quaternion.copy(baseRot[i]);b.position.copy(basePos[i]);});
    mixer.update(Math.min(dt,.05));
-   const p=avatarPose(a,s);this.mode=p.mode;
-   bones.hips.position.y+=p.hipsY/scale/1.91;
+   const target=avatarPose(a,s);
+   const p=blendAvatarPose(blendedPose,target,dt);blendedPose=p;this.mode=target.mode;
+   bones.hips.position.y+=(p.hipsY+p.breath)/scale/1.91;
+   rotateBone(bones.hips,'y',p.hipsYaw,rig);
    rotateBone(bones.spine,'x',p.spineX*.63,rig);
    rotateBone(bones.spine2,'x',p.spineX*.45,rig);
    rotateBone(bones.spine2,'y',p.spineY,rig);
    rotateBone(bones.spine,'z',p.spineZ,rig);
    rotateBone(bones.head,'x',p.headX,rig);
+   rotateBone(bones.head,'y',p.headY,rig);
    rotateBone(bones.jaw,'x',p.jawX,rig);
    rotateBone(bones.leftShoulder,'z',-p.shoulderLift,rig);
    rotateBone(bones.rightShoulder,'z',p.shoulderLift,rig);
@@ -83,8 +87,8 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
    rotateBone(bones.rightLeg,'x',p.legs[1]*.87,rig);
    rotateBone(bones.leftKnee,'x',p.knees[0]*.8,rig);
    rotateBone(bones.rightKnee,'x',p.knees[1]*.8,rig);
-   rotateBone(bones.leftFoot,'x',-p.knees[0]*.25,rig);
-   rotateBone(bones.rightFoot,'x',-p.knees[1]*.25,rig);
+   rotateBone(bones.leftFoot,'x',-p.knees[0]*.25+p.footAngles[0],rig);
+   rotateBone(bones.rightFoot,'x',-p.knees[1]*.25+p.footAngles[1],rig);
    for(const finger of fingers.left)rotateBone(finger,'x',p.handCurl[0],rig);
    for(const finger of fingers.right)rotateBone(finger,'x',p.handCurl[1],rig);
   }
