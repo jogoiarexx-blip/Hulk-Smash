@@ -47,7 +47,7 @@ test('Game connects telegraphs, patterns, warnings and recycling with hard GPU c
  const fs=await import('node:fs');
  const game=fs.readFileSync(new URL('../src/game.js',import.meta.url),'utf8');
  const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
- for(const marker of ['function startEnemyTelegraph(e,aim)','function updateEnemyTelegraph(e,dt)','function updateDangerWarning()','volleyDirections(direction,pattern)','attackPattern(e.kind,!!e.boss,e.attackCount++)','projectileThreat(p,player.position.clone().add(vec(0,2.6,0)))','particlePool.pop()','particleQuota(distance,particles.length)','geometry.ring','function releaseParticle(p)'])assert.ok(game.includes(marker),marker);
+ for(const marker of ['function startEnemyTelegraph(e,aim)','function updateEnemyTelegraph(e,dt)','function updateDangerWarning()','volleyDirections(direction,pattern)','attackPattern(e.kind,!!e.boss,e.attackCount++)','projectileThreat(p,player.position.clone().add(vec(0,2.6,0)))','particlePool.pop()','particleQuota(distance,particles.length,170)','geometry.ring','function releaseParticle(p)'])assert.ok(game.includes(marker),marker);
  for(const id of ['dangerIndicator','dangerLabel'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(html,/V2\.5/);
 });
