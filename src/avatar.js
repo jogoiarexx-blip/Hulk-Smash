@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=2.2';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=2.3';
 import { resolveHulkSkeleton } from './rig-map.mjs?v=2.0';
 import { contactHands, dampWeight, footStance, reachLimit } from './contact-ik.mjs?v=2.0';
 

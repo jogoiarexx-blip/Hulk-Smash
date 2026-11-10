@@ -1,4 +1,4 @@
-// Hulk v2.2 — heavy locomotion, torso-driven combat, lift and landing pose curves. Pure module, no WebGL dependency.
+// Hulk v2.3 — contextual tank crush, spinning throws and hit responses. Pure module, no WebGL dependency.
 // Combat damage and collisions remain exclusively controlled by game.js.
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,Number.isFinite(v)?v:0));
 const smoothstep=(a,b,x)=>{const t=clamp((x-a)/(b-a));return t*t*(3-2*t);};
@@ -29,6 +29,8 @@ export function avatarPose(a={},s={}){
   const lift=s.holdingEnemy?clamp(s.liftRatio):0;
   const grabWind=anticipation(a.grabEnemyPose||0,.95);
   const double=action(a.doubleSmashPose||0,.82,.43,.66),doubleWind=anticipation(a.doubleSmashPose||0,.82);
+  const tankCrush=action(a.tankCrushPose||0,.76,.46,.76),crushWind=anticipation(a.tankCrushPose||0,.76);
+  const spinning=action(a.spinThrowPose||0,.82,.23,.91),spinAngle=Number.isFinite(a.spinAngle)?a.spinAngle:0;
   const climbing=!!a.climbing;
   const airborne=!a.onGround&&!climbing;
   const rage=(s.rageTime||0)>0;
@@ -54,39 +56,41 @@ export function avatarPose(a={},s={}){
   if(slam>.05)mode='ground-smash';
   if(clap>.05)mode='thunderclap';
   if(double>.05)mode='double-smash';
+  if(tankCrush>.05)mode='tank-crush';
+  if(spinning>.05)mode='spin-throw';
   if(punch>.05)mode=combo===3?'finisher':a.attackHand<0?'left-punch':'right-punch';
   if(recoil>.08)mode='hit-react';
   if(rage&&mode==='idle')mode='rage-idle';
   const armL=climbing?-2.10+climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
-    -stride*(.37+runWeight*.07)+windLeft*.42-strikeLeft*2.1-slam*1.70+slamWind*.15-clap*1.80+clapWind*.47-throwing*1.25-holding*(s.holdingEnemy?(1.08+lift*1.70):2.42)+grabWind*.28-charged*.5-double*2.1+doubleWind*.32;
+    -stride*(.37+runWeight*.07)+windLeft*.42-strikeLeft*2.1-slam*1.70+slamWind*.15-clap*1.80+clapWind*.47-throwing*1.25-holding*(s.holdingEnemy?(1.08+lift*1.70):2.42)+grabWind*.28-charged*.5-double*2.1+doubleWind*.32-tankCrush*1.85+crushWind*.39-spinning*.46;
   const armR=climbing?-2.10-climbWave*.60:
     airborne?(a.airSmash?-2.2:-.65-launching*.40):
-    stride*(.37+runWeight*.07)+windRight*.42-strikeRight*2.1-slam*1.70+slamWind*.15-clap*1.80+clapWind*.47-throwing*1.15-holding*(s.holdingEnemy?(1.08+lift*1.70):2.42)+grabWind*.28-charged*.5-double*2.1+doubleWind*.32;
+    stride*(.37+runWeight*.07)+windRight*.42-strikeRight*2.1-slam*1.70+slamWind*.15-clap*1.80+clapWind*.47-throwing*1.15-holding*(s.holdingEnemy?(1.08+lift*1.70):2.42)+grabWind*.28-charged*.5-double*2.1+doubleWind*.32-tankCrush*1.85+crushWind*.39-spinning*.46;
   const legL=climbing?(-.48+climbWave*.51):(airborne?-.27-launching*.18+falling*.09:stride*(.54+runWeight*.11)-powerStance*.22-recoil*.19-landing*.13);
   const legR=climbing?(-.48-climbWave*.51):(airborne?-.44+falling*.12:-stride*(.54+runWeight*.11)-powerStance*.20-recoil*.19-landing*.13);
   return {
-    mode,walking,runWeight,landingWeight:landing,charged,punch,clap,slam,rage,
+    mode,walking,runWeight,landingWeight:landing,tankCrush,spinning,charged,punch,clap,slam,rage,
     legs:[legL,legR],
-    knees:[climbing?.62+clamp(-climbWave)*.20:airborne?.72+falling*.12:Math.max(0,-swing)*(.73*walking+runWeight*.18)+charged*.86+landing*.44+liftBrace*.22,
-           climbing?.62+clamp(climbWave)*.20:airborne?.88+falling*.08:Math.max(0,swing)*(.73*walking+runWeight*.18)+charged*.86+landing*.44+liftBrace*.22],
+    knees:[climbing?.62+clamp(-climbWave)*.20:airborne?.72+falling*.12:Math.max(0,-swing)*(.73*walking+runWeight*.18)+charged*.86+landing*.44+liftBrace*.22+tankCrush*.56,
+           climbing?.62+clamp(climbWave)*.20:airborne?.88+falling*.08:Math.max(0,swing)*(.73*walking+runWeight*.18)+charged*.86+landing*.44+liftBrace*.22+tankCrush*.56],
     arms:[armL,armR],
-    forearms:[climbing?-.38-climbWave*.14:.14+runWeight*.12+windLeft*.25+strikeLeft*.56+clap*.94+charged*.36+holding*.44+double*.52,
-              climbing?-.38+climbWave*.14:.14+runWeight*.12+windRight*.25+strikeRight*.56+clap*.94+charged*.36+holding*.44+double*.52],
+    forearms:[climbing?-.38-climbWave*.14:.14+runWeight*.12+windLeft*.25+strikeLeft*.56+clap*.94+charged*.36+holding*.44+double*.52+tankCrush*.73+spinning*.18,
+              climbing?-.38+climbWave*.14:.14+runWeight*.12+windRight*.25+strikeRight*.56+clap*.94+charged*.36+holding*.44+double*.52+tankCrush*.73+spinning*.18],
     // During the thunderclap the arms converge in front of the chest.
-    spreads:[-.12+clap*.91-clapWind*.47-slam*.22-strikeLeft*.16+holding*.18+double*.30,
-              .12-clap*.91+clapWind*.47+slam*.22+strikeRight*.16-holding*.18-double*.30],
-    shoulderLift:climbing?.20:clap*.19+slam*.18+punchWind*.14+recoil*.25+liftBrace*.12-runWeight*.04,
-    spineX:climbing?-.26:recoil*-.43+walking*.095+runWeight*.16+liftBrace*.38+charged*.30+slam*.30+double*.34+landing*.31+punch*.16-punchWind*.09+(airborne?-.16+launching*.10:0),
-    spineY:(strikeRight-strikeLeft)*(.36+combo*.075)+recoil*.14+(windLeft-windRight)*.24+sway*.045,
+    spreads:[-.12+clap*.91-clapWind*.47-slam*.22-strikeLeft*.16+holding*.18+double*.30+tankCrush*.28+spinning*.25,
+              .12-clap*.91+clapWind*.47+slam*.22+strikeRight*.16-holding*.18-double*.30-tankCrush*.28-spinning*.25],
+    shoulderLift:climbing?.20:clap*.19+slam*.18+punchWind*.14+recoil*.25+liftBrace*.12-runWeight*.04+tankCrush*.24,
+    spineX:climbing?-.26:recoil*-.43+walking*.095+runWeight*.16+liftBrace*.38+charged*.30+slam*.30+double*.34+landing*.31+tankCrush*.51+spinning*.05+punch*.16-punchWind*.09+(airborne?-.16+launching*.10:0),
+    spineY:(strikeRight-strikeLeft)*(.36+combo*.075)+recoil*.14+(windLeft-windRight)*.24+sway*.045+Math.sin(spinAngle)*spinning*.50,
     spineZ:climbing?0:sway*(.045+runWeight*.045)+recoil*.13+(strikeLeft-strikeRight)*.095,
-    hipsYaw:sway*-.065+(strikeRight-strikeLeft)*-.18+(windLeft-windRight)*.12,
-    hipsY:-charged*.24-landing*.23-powerStance*.13-recoil*.09-liftBrace*.21-runWeight*.045+(climbing?Math.sin((s.time||0)*17)*.015*moveClimb:Math.sin(gait*2)*(.035+.014*runWeight)*walking),
+    hipsYaw:sway*-.065+(strikeRight-strikeLeft)*-.18+(windLeft-windRight)*.12-Math.sin(spinAngle)*spinning*.22,
+    hipsY:-charged*.24-landing*.23-powerStance*.13-recoil*.09-liftBrace*.21-runWeight*.045-tankCrush*.23-spinning*.075+(climbing?Math.sin((s.time||0)*17)*.015*moveClimb:Math.sin(gait*2)*(.035+.014*runWeight)*walking),
     headX:recoil*-.20+(a.airSmash?.16:0)+slam*.15+clap*.06-charged*.13-falling*.09-runWeight*.055+landing*.09-punchWind*.04,
     headY:(strikeLeft-strikeRight)*.11,
-    jawX:recoil*.24+(rage?.16:0)+slam*.19+clap*.22+punch*.065+double*.11,
-    handCurl:[.19+(strikeLeft+clap+slam+holding+charged+double)*.24+rage*.08+runWeight*.06,
-              .19+(strikeRight+clap+slam+holding+charged+double)*.24+rage*.08+runWeight*.06],
+    jawX:recoil*.24+(rage?.16:0)+slam*.19+clap*.22+punch*.065+double*.11+tankCrush*.19+spinning*.12,
+    handCurl:[.19+(strikeLeft+clap+slam+holding+charged+double)*.24+rage*.08+runWeight*.06+(tankCrush+spinning)*.12,
+              .19+(strikeRight+clap+slam+holding+charged+double)*.24+rage*.08+runWeight*.06+(tankCrush+spinning)*.12],
     footAngles:[climbing?-.22+climbWave*.24:airborne?-.28+falling*.18:Math.max(0,cos)*(.20+runWeight*.055)*walking-charged*.22-landing*.16,
                 climbing?-.22-climbWave*.24:airborne?-.23+falling*.18:Math.max(0,-cos)*(.20+runWeight*.055)*walking-charged*.22-landing*.16],
     breath:breathing*.013*(1-clamp(walking*.5)),
@@ -97,7 +101,7 @@ export function avatarPose(a={},s={}){
 // every frame uses original idle animation + a blended additive procedural pose.
 export function blendAvatarPose(previous,target,dt){
   if(!previous||!(dt>0))return target;
-  const combat=/punch|finisher|hit-react|clap|smash|thunderclap|throw-grab|tank-lift|land/.test(target.mode);
+  const combat=/punch|finisher|hit-react|clap|smash|thunderclap|throw-grab|tank-lift|land|tank-crush|spin-throw/.test(target.mode);
   const climbing=target.mode.startsWith('climb');
   const speed=combat?20:climbing?11:(target.walking>.1?12:8);
   const alpha=1-Math.exp(-clamp(dt,0,.08)*speed);

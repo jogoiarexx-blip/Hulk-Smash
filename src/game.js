@@ -4,7 +4,7 @@ import { createSurfaceMaterials } from './surfaces.js';
 import { circleRectOverlap, segmentAABB2D, segmentSphere3D, sweptBuildingHit, moveCircleSlide } from './physics.mjs';
 import { towerSections, advanceStructuralBody, bodyTouchesActor, shouldPlayPunchImpact, sweptSectionHit } from './structural.mjs';
 import { findClimbWall, chargedJumpSpeed, chargeRatio, landingHeight, roofAt, thunderclapContains } from './powers.mjs';
-import { heavyHitCrossed, grabEligible, throwStep, impactKnockback, enemyCanTakeDamage, enemyRenderScale, slamImpactCrossed } from './combat.mjs?v=2.1';
+import { heavyHitCrossed, grabEligible, throwStep, impactKnockback, enemyCanTakeDamage, enemyRenderScale, slamImpactCrossed, findContextTank, spinThrowOrbit, impactRecoil } from './combat.mjs?v=2.3';
 import { CAMPAIGN, chapterComplete, chapterProgress, escortAdvance, convoyPosition, shouldDefenderFire } from './campaign.mjs?v=2.0';
 import { applyCarDamage, dentPose } from './deformation.mjs';
 import { nextChainStep, chainMultiplier, clapImpactTimerCrossed, throwLiftProgress } from './combo.mjs';
@@ -18,7 +18,7 @@ const clamp = (v,min,max) => Math.max(min, Math.min(max,v));
 const smooth = (current,target,dt,speed=7) => THREE.MathUtils.damp(current,target,speed,dt);
 const temp = new THREE.Vector3();
 const vec = (x=0,y=0,z=0) => new THREE.Vector3(x,y,z);
-const state = { mode:'menu', time:0, score:0, destroyed:0, kills:0, combo:0, comboTimer:0, rage:0, rageTime:0, health:100, stage:0, hurtCooldown:0, shotCooldown:0, slamCooldown:0, clapCooldown:0, pickCooldown:0, doubleCooldown:0, chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,roarCooldown:0, camYaw:Math.PI/4, camPitch:0.50, camDist:26, shake:0, hintTime:0, enemyWaveTime:0, hudTime:0, soundOn:true };
+const state = { mode:'menu', time:0, score:0, destroyed:0, kills:0, combo:0, comboTimer:0, rage:0, rageTime:0, health:100, stage:0, hurtCooldown:0, shotCooldown:0, slamCooldown:0, clapCooldown:0, pickCooldown:0, doubleCooldown:0, tankCooldown:0, spinCooldown:0, tankCrushes:0, spinThrows:0, chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,roarCooldown:0, camYaw:Math.PI/4, camPitch:0.50, camDist:26, shake:0, hintTime:0, enemyWaveTime:0, hudTime:0, soundOn:true };
 const stages = CAMPAIGN;
 let renderer, scene, camera, player, playerRig, animation;
 let newAvatar=null,avatarState='loading',avatarError='',avatarRequest=null;
@@ -26,7 +26,7 @@ const legacyPartsForAvatar=[];
 const audio=new AudioEngine();
 let footsteps=0, qualityClock=0, fpsClock=0, frameAccumulator=0, frameSamples=0;
 let particles=[], debris=[], structures=[], effects=[], buildings=[], enemies=[], cars=[], projectiles=[], decorations=[];
-let mission=null,holdingCar=null, holdingEnemy=null, windClock=0, toastTimer=0, lastT=0, damageFlashTimer=0, collapseSoundCooldown=0;
+let mission=null,holdingCar=null, holdingEnemy=null, tankCrushTarget=null, windClock=0, toastTimer=0, lastT=0, damageFlashTimer=0, collapseSoundCooldown=0;
 const keys = new Set();
 const input={rightDown:false,mouseX:0,mouseY:0,pointerInside:false};
 const mats = {};
@@ -277,7 +277,7 @@ function makeHulk(){
  const shadow=dropShadow(player,2,.31);
  animation={leftArm:arms[0],rightArm:arms[1],leftForearm:forearms[0],rightForearm:forearms[1],
    leftLeg:legs[0],rightLeg:legs[1],leftShin:shins[0],rightShin:shins[1],
-   torso,body,head:headGroup,jaw,rig,attack:0,attackHand:1,punchCount:0,pendingPunch:false,comboStep:0,slamPose:0,pendingSlam:false,slamRadius:15.5,clapPose:0,pendingClap:false,doubleSmashPose:0,pendingDoubleSmash:false,grabEnemyPose:0,
+   torso,body,head:headGroup,jaw,rig,attack:0,attackHand:1,punchCount:0,pendingPunch:false,comboStep:0,slamPose:0,pendingSlam:false,slamRadius:15.5,clapPose:0,pendingClap:false,doubleSmashPose:0,pendingDoubleSmash:false,tankCrushPose:0,pendingTankCrush:false,spinThrowPose:0,pendingSpinThrow:false,spinAngle:0,grabEnemyPose:0,
    throwPose:0,grabPose:0,roarPose:0,hitReact:0,walk:0,speed:0,velocity:vec(),
    jumpVelocity:0,onGround:true,airPeak:0,landTime:0,landingPower:1,shadow,
    jumpCharge:0,chargingJump:false,airStartY:0,airSmash:false,climbing:false,climbFace:null,climbLock:0,groundY:0};
@@ -357,7 +357,7 @@ function spawnEnemy(kind,where=null){
   }
   group.position.y=rand(12,18);
  }
- const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6};
+ const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6,recoilPitch:0,recoilRoll:0,spinThrow:false};
  enemies.push(obj);return obj;
 }
 function explosion(x,y,z,color='#ffaa54',power=1){
@@ -538,6 +538,9 @@ function damageEnemy(enemy,amount,origin=player.position){
  if(enemy.kind==='tank'&&enemy.group.userData.tankArmor){const armor=enemy.group.userData.tankArmor;armor.scale.y=1.6*Math.max(.63,1-(1-Math.min(1,enemy.health/(enemy.maxHealth||115)))*.32);armor.rotation.z=Math.max(-.17,Math.min(.17,(1-enemy.health/115)*.12));}
  const impulse=impactKnockback(enemy.group.position,origin,amount,enemy.kind);
  enemy.knockVX+=impulse.x;enemy.knockVZ+=impulse.z;
+ const reaction=impactRecoil(enemy.group.position,origin,amount,enemy.kind);
+ enemy.recoilPitch=clamp((enemy.recoilPitch||0)+reaction.pitch,-.42,.42);
+ enemy.recoilRoll=clamp((enemy.recoilRoll||0)+reaction.roll,-.42,.42);
  enemy.stun=Math.max(enemy.stun,impulse.stun);
  for(let i=0;i<3;i++)particle(enemy.group.position.clone().add(vec(0,enemy.kind==='tank'?2:0,0)),'#ffc266',rand(.2,.4),.36,vec(rand(-8,8),rand(2,11),rand(-8,8)));
  if(enemy.health<=0){
@@ -584,7 +587,7 @@ function applyAreaDamage(origin,radius,power,dir=null){
  } return hitCount;
 }
 function punch(){
- if(state.mode!=='playing'||animation.doubleSmashPose>0||holdingEnemy||holdingCar||animation.climbing)return;
+ if(state.mode!=='playing'||animation.doubleSmashPose>0||animation.tankCrushPose>0||animation.spinThrowPose>0||holdingEnemy||holdingCar||animation.climbing)return;
  if(state.shotCooldown>0){if(state.shotCooldown<.32)state.queuedPunch=.38;return;}
  const rage=state.rageTime>0;
  state.chainStep=nextChainStep(state.chainStep,state.chainWindow);
@@ -605,8 +608,38 @@ function executePunchImpact(){
  shockRing(point.x,point.z,rage?4.2:2.5,'#cbf779',.25);
  cameraShake(hits>0?.32:.10);playSound('punch');if(hits>0)playSound('hit',.40);
 }
+function tankCrushAction(){
+ if(state.mode!=='playing'||!animation.onGround||animation.chargingJump||animation.climbing||holdingCar||holdingEnemy||state.tankCooldown>0||animation.tankCrushPose>0||animation.spinThrowPose>0||animation.doubleSmashPose>0)return;
+ const target=findContextTank(enemies,player.position,playerForward);
+ if(!target){notify('T · FIQUE DE FRENTE A UM TANQUE COMUM');return;}
+ tankCrushTarget=target;state.tankCooldown=state.rageTime>0?2.6:4.5;
+ animation.tankCrushPose=.76;animation.pendingTankCrush=true;
+ animation.attack=0;animation.pendingPunch=false;state.queuedPunch=0;
+ notify('ESMAGAMENTO DE TANQUE!',.8);playSound('roar',.25);
+}
+function tankCrushImpact(){
+ const target=tankCrushTarget;tankCrushTarget=null;
+ if(state.mode!=='playing'||!target||findContextTank([target],player.position,playerForward)!==target){
+  state.tankCooldown=Math.min(state.tankCooldown,.8);return;
+ }
+ const point=target.group.position.clone();
+ damageEnemy(target,state.rageTime>0?245:145,player.position);
+ applyAreaDamage(point,5.8,state.rageTime>0?52:28);
+ shockRing(point.x,point.z,8.4,'#d3fd7a',.48,Math.max(0,point.y));
+ for(let i=0;i<14;i++)particle(point.clone().add(vec(rand(-2,2),rand(.2,3),rand(-2,2))),i%3?'#7d8e74':'#eac18b',rand(.18,.5),rand(.25,.68),vec(rand(-7,7),rand(3,12),rand(-7,7)));
+ state.tankCrushes++;score(190);cameraShake(.76);playSound('slam',1);playSound('crash',.62);
+}
+function spinThrowAction(){
+ if(state.mode!=='playing'||!animation.onGround||animation.climbing||animation.spinThrowPose>0||animation.tankCrushPose>0||state.spinCooldown>0)return;
+ if(!holdingEnemy||!holdingEnemy.alive){notify('H · AGARRE UM TANQUE OU DRONE COM G');return;}
+ if((holdingEnemy.liftTime||0)<(holdingEnemy.liftDuration||.65)*.85){notify('TERMINE DE LEVANTAR O INIMIGO');return;}
+ state.spinCooldown=state.rageTime>0?3.1:5.4;
+ animation.spinThrowPose=.82;animation.pendingSpinThrow=true;animation.spinAngle=0;
+ animation.grabEnemyPose=0;animation.attack=0;animation.pendingPunch=false;
+ notify('ARREMESSO GIRATÓRIO!',.9);playSound('grab',.38);
+}
 function doubleSmash(){
- if(state.mode!=='playing'||!animation.onGround||animation.climbing||holdingCar||holdingEnemy||state.doubleCooldown>0)return;
+ if(state.mode!=='playing'||!animation.onGround||animation.climbing||holdingCar||holdingEnemy||animation.tankCrushPose>0||animation.spinThrowPose>0||state.doubleCooldown>0)return;
  state.doubleCooldown=state.rageTime>0?2.4:3.8;
  animation.doubleSmashPose=.82;animation.pendingDoubleSmash=true;
  animation.attack=0;animation.pendingPunch=false;
@@ -622,7 +655,7 @@ function doubleSmashImpact(){
  cameraShake(.7);playSound('slam',1.1);
 }
 function slam(power=1,fromLanding=false){
- if(state.mode!=='playing'||state.slamCooldown>0||!animation.onGround)return;
+ if(state.mode!=='playing'||state.slamCooldown>0||!animation.onGround||animation.tankCrushPose>0||animation.spinThrowPose>0)return;
  state.slamCooldown=state.rageTime>0?3.5:5.2;
  const radius=power===1?15.5:power;
  animation.slamPose=fromLanding?.35:.60;
@@ -644,7 +677,7 @@ function slamImpact(radius){
  cameraShake(.9);playSound('slam');
 }
 function thunderclap(){
- if(state.mode!=='playing'||state.clapCooldown>0||animation.climbing||animation.doubleSmashPose>0||holdingEnemy)return;
+ if(state.mode!=='playing'||state.clapCooldown>0||animation.climbing||animation.doubleSmashPose>0||animation.tankCrushPose>0||animation.spinThrowPose>0||holdingEnemy)return;
  state.clapCooldown=state.rageTime>0?3.1:5.0;
  animation.clapPose=.88;animation.pendingClap=true;
  animation.attack=0;animation.pendingPunch=false;
@@ -771,25 +804,33 @@ function updateHeldEnemy(dt){
  if(!e||!e.alive)return;
  e.liftTime=Math.min(e.liftDuration,e.liftTime+dt);
  const blend=throwLiftProgress(e.liftTime,e.liftDuration);
+ if(animation.pendingSpinThrow){
+  const orbit=spinThrowOrbit(.82-animation.spinThrowPose,.82);
+  e.group.position.set(orbit.x,orbit.y,orbit.z);e.group.rotation.y=orbit.angle;
+  animation.spinAngle=orbit.angle;
+  return;
+ }
  const target=vec(0,e.kind==='tank'?5.45:5.75,2.9);
  e.group.position.lerpVectors(e.liftStart,target,blend);
  e.group.scale.setScalar(THREE.MathUtils.lerp(1,e.kind==='tank'?.62:.88,blend));
  e.group.rotation.x=-.18*blend;
 }
-function throwGrabbedEnemy(){
- const e=holdingEnemy;if(!e||!e.alive)return false;
+function throwGrabbedEnemy(spinning=false){
+ const e=holdingEnemy;if(!e||!e.alive||(!spinning&&animation.pendingSpinThrow))return false;
  if((e.liftTime||0)<(e.liftDuration||.65)*.65){notify('LEVANTANDO INIMIGO...',.65);return false;}
- holdingEnemy=null;e.held=false;e.thrown=true;e.throwLife=3.0;e.vy=15;state.throws++;
- e.fly=directionVector().multiplyScalar(e.kind==='tank'?34:43);
+ holdingEnemy=null;e.held=false;e.thrown=true;e.spinThrow=spinning;e.throwLife=spinning?3.4:3;e.vy=spinning?19:15;state.throws++;
+ e.fly=directionVector().multiplyScalar(e.kind==='tank'?(spinning?49:34):(spinning?56:43));
  scene.attach(e.group);e.group.scale.setScalar(1);
  e.group.position.copy(player.position).add(vec(0,5.4,0)).addScaledVector(playerForward,4.3);
- animation.throwPose=.48;animation.grabEnemyPose=0;
- cameraShake(.28);playSound('throw');notify(e.kind==='tank'?'TANQUE LANÇADO!':'DRONE LANÇADO!');
+ animation.throwPose=.48;animation.grabEnemyPose=0;animation.spinAngle=0;
+ if(spinning){state.spinThrows++;shockRing(player.position.x,player.position.z,5,'#beff80',.42,player.position.y);}
+ cameraShake(spinning?.52:.28);playSound('throw',spinning?1:.75);
+ notify(spinning?(e.kind==='tank'?'TANQUE LANÇADO GIRANDO!':'DRONE LANÇADO GIRANDO!'):(e.kind==='tank'?'TANQUE LANÇADO!':'DRONE LANÇADO!'));
  return true;
 }
 function grabEnemyAction(){
- if(state.mode!=='playing'||state.pickCooldown>0||animation.climbing||animation.doubleSmashPose>0)return;
- if(holdingEnemy){state.pickCooldown=.55;throwGrabbedEnemy();return;}
+ if(state.mode!=='playing'||state.pickCooldown>0||animation.climbing||animation.doubleSmashPose>0||animation.tankCrushPose>0||animation.pendingSpinThrow)return;
+ if(holdingEnemy){if(throwGrabbedEnemy())state.pickCooldown=.55;return;}
  if(holdingCar){notify('ARREMESSE O CARRO COM E PRIMEIRO');return;}
  const target=enemies.filter(e=>grabEligible(e,player.position,playerForward))
   .sort((a,b)=>a.group.position.distanceToSquared(player.position)-b.group.position.distanceToSquared(player.position))[0];
@@ -805,14 +846,15 @@ function grabEnemyAction(){
 function resolveEnemyThrow(e,point){
  if(!e.alive)return;
  e.thrown=false;e.throwLife=0;e.group.position.copy(point);e.group.scale.setScalar(1);
- const radius=e.kind==='tank'?8:6;
+ const spinning=!!e.spinThrow;e.spinThrow=false;
+ const radius=(e.kind==='tank'?8:6)+(spinning?3:0);
  // Exclude the thrown body from area damage while resolving the collision.
  e.held=true;
- applyAreaDamage(point,radius,e.kind==='tank'?78:50);
+ applyAreaDamage(point,radius,e.kind==='tank'?(spinning?128:78):(spinning?88:50));
  e.held=false;
  damageEnemy(e,9999,player.position);
  shockRing(point.x,point.z,radius,'#ffc97d',.38,Math.max(0,point.y));
- cameraShake(.50);playSound('crash');
+ cameraShake(spinning?.85:.50);playSound('crash',spinning?1:.7);
 }
 function updateThrownEnemy(e,dt){
  const from=e.group.position.clone(),step=throwStep({x:from.x,y:from.y,z:from.z,vx:e.fly.x,vy:e.vy,vz:e.fly.z},dt,SETTINGS.gravity);
@@ -845,8 +887,8 @@ function updateThrownEnemy(e,dt){
  }
 }
 function handleCarAction(){
- if(state.mode!=='playing'||state.pickCooldown>0)return;
- if(holdingEnemy){throwGrabbedEnemy();state.pickCooldown=.52;return;}
+ if(state.mode!=='playing'||state.pickCooldown>0||animation.pendingSpinThrow||animation.tankCrushPose>0)return;
+ if(holdingEnemy){if(throwGrabbedEnemy())state.pickCooldown=.52;return;}
  state.pickCooldown=.52;
  if(holdingCar){
   const c=holdingCar;holdingCar=null;c.held=false;c.thrown=true;c.life=3.5;
@@ -926,7 +968,8 @@ function updatePlayer(dt){
       '#c4fc79',rand(.10,.23),rand(.18,.43),vec(Math.cos(a)*rand(.2,2),rand(1,4),Math.sin(a)*rand(.2,2)));
    }
   }
-  const targetSpeed=(animation.chargingJump?3.4:(sprint?19:11.5))*(state.rageTime>0?1.23:1);
+  const actionLocked=animation.tankCrushPose>0||animation.spinThrowPose>0;
+  const targetSpeed=actionLocked?0:(animation.chargingJump?3.4:(sprint?19:11.5))*(state.rageTime>0?1.23:1);
   const accel=animation.onGround?12.5:4;
   const smoothing=1-Math.exp(-dt*accel);
   animation.velocity.x+=(move.x*targetSpeed-animation.velocity.x)*smoothing;
@@ -939,7 +982,7 @@ function updatePlayer(dt){
   const actualSpeed=Math.hypot(vx,vz);
   animation.speed=smooth(animation.speed,actualSpeed,dt,9);
   if(result.collisions>0){animation.velocity.x=vx;animation.velocity.z=vz;}
-  if(actualSpeed>.3){
+  if(actualSpeed>.3&&!actionLocked){
    const targetYaw=Math.atan2(vx,vz);
    playerRig.rotation.y+=Math.atan2(Math.sin(targetYaw-playerRig.rotation.y),Math.cos(targetYaw-playerRig.rotation.y))*Math.min(1,dt*12);
   }
@@ -965,15 +1008,17 @@ function updatePlayer(dt){
  const holding=holdingCar||holdingEnemy?1:0;
  const doubleWeight=Math.sin(Math.PI*clamp(animation.doubleSmashPose/.82,0,1));
  const clapWeight=Math.sin(Math.PI*clamp(animation.clapPose/.88,0,1));
+ const crushWeight=Math.sin(Math.PI*clamp(animation.tankCrushPose/.76,0,1));
+ const spinWeight=Math.sin(Math.PI*clamp(animation.spinThrowPose/.82,0,1));
  const chargeWeight=animation.chargingJump?chargeRatio(animation.jumpCharge):0;
- animation.leftArm.rotation.x=smooth(animation.leftArm.rotation.x, climbWeight?(-2.65+Math.sin(state.time*9)*.38):(-step*.31*gait-attackL*1.96-slamWeight*1.45-throwWeight*.85-holding*2.78-clapWeight*1.1-doubleWeight*2.12),dt,19);
- animation.rightArm.rotation.x=smooth(animation.rightArm.rotation.x, climbWeight?(-2.65-Math.sin(state.time*9)*.38):(step*.31*gait-attackR*1.96-slamWeight*1.45-throwWeight*.85-holding*2.78-clapWeight*1.1-doubleWeight*2.12),dt,19);
+ animation.leftArm.rotation.x=smooth(animation.leftArm.rotation.x, climbWeight?(-2.65+Math.sin(state.time*9)*.38):(-step*.31*gait-attackL*1.96-slamWeight*1.45-throwWeight*.85-holding*2.78-clapWeight*1.1-doubleWeight*2.12-crushWeight*1.7-spinWeight*.35),dt,19);
+ animation.rightArm.rotation.x=smooth(animation.rightArm.rotation.x, climbWeight?(-2.65-Math.sin(state.time*9)*.38):(step*.31*gait-attackR*1.96-slamWeight*1.45-throwWeight*.85-holding*2.78-clapWeight*1.1-doubleWeight*2.12-crushWeight*1.7-spinWeight*.35),dt,19);
  animation.leftArm.rotation.z=smooth(animation.leftArm.rotation.z,climbWeight?-.35:(-.12-attackL*.26-slamWeight*.4-holding*.37+clapWeight*1.25+doubleWeight*.26),dt,14);
  animation.rightArm.rotation.z=smooth(animation.rightArm.rotation.z,climbWeight?.35:(.12+attackR*.26+slamWeight*.4+holding*.37-clapWeight*1.25-doubleWeight*.26),dt,14);
  animation.leftForearm.rotation.x=smooth(animation.leftForearm.rotation.x,-.16+attackL*.48+holding*.45,dt,18);
  animation.rightForearm.rotation.x=smooth(animation.rightForearm.rotation.x,-.16+attackR*.48+holding*.45,dt,18);
- animation.body.rotation.y=smooth(animation.body.rotation.y,(attackR-attackL)*.24+Math.sin(animation.walk)*.06*gait,dt,15);
- animation.body.rotation.x=smooth(animation.body.rotation.x,climbWeight?-.27:(animation.onGround?(gait*.085+slamWeight*.35+chargeWeight*.22+doubleWeight*.32):-.15),dt,9);
+ animation.body.rotation.y=smooth(animation.body.rotation.y,(attackR-attackL)*.24+Math.sin(animation.walk)*.06*gait+Math.sin(animation.spinAngle)*spinWeight*.28,dt,15);
+ animation.body.rotation.x=smooth(animation.body.rotation.x,climbWeight?-.27:(animation.onGround?(gait*.085+slamWeight*.35+chargeWeight*.22+doubleWeight*.32+crushWeight*.35):-.15),dt,9);
  animation.rig.rotation.z=smooth(animation.rig.rotation.z,Math.sin(animation.walk)*.052*gait,dt,7);
  animation.rig.position.y=(climbWeight?Math.sin(state.time*12)*.10:Math.sin(animation.walk*2)*.085*gait)+(animation.landTime>0?-.24*Math.sin(Math.PI*animation.landTime/.26):0)-chargeWeight*.35;
  // Subtle counter-rotation in the feet, keeping toes pointed during strides.
@@ -993,7 +1038,18 @@ function updatePlayer(dt){
  animation.clapPose=nextClap;
  const nextDouble=Math.max(0,animation.doubleSmashPose-dt);
  if(animation.pendingDoubleSmash&&heavyHitCrossed(animation.doubleSmashPose,nextDouble)){animation.pendingDoubleSmash=false;doubleSmashImpact();}
- animation.doubleSmashPose=nextDouble;animation.hitReact=Math.max(0,animation.hitReact-dt);animation.grabEnemyPose=Math.max(0,animation.grabEnemyPose-dt);
+ animation.doubleSmashPose=nextDouble;
+ const nextTank=Math.max(0,animation.tankCrushPose-dt);
+ if(animation.pendingTankCrush&&heavyHitCrossed(animation.tankCrushPose,nextTank,.76,.31)){
+  animation.pendingTankCrush=false;tankCrushImpact();
+ }
+ animation.tankCrushPose=nextTank;
+ const nextSpin=Math.max(0,animation.spinThrowPose-dt);
+ if(animation.pendingSpinThrow&&heavyHitCrossed(animation.spinThrowPose,nextSpin,.82,.23)){
+  animation.pendingSpinThrow=false;throwGrabbedEnemy(true);
+ }
+ animation.spinThrowPose=nextSpin;
+ animation.hitReact=Math.max(0,animation.hitReact-dt);animation.grabEnemyPose=Math.max(0,animation.grabEnemyPose-dt);
  const nextSlam=Math.max(0,animation.slamPose-dt);
   if(animation.pendingSlam&&slamImpactCrossed(animation.slamPose,nextSlam)){
    animation.pendingSlam=false;
@@ -1172,6 +1228,8 @@ function updateEnemies(dt){
   if(e.held)continue;
   if(e.thrown){updateThrownEnemy(e,dt);continue;}
   e.cooldown-=dt;e.blink-=dt;e.stun=Math.max(0,e.stun-dt);
+  e.recoilPitch=(e.recoilPitch||0)*Math.exp(-dt*9);
+  e.recoilRoll=(e.recoilRoll||0)*Math.exp(-dt*9);
   if(Math.hypot(e.knockVX,e.knockVZ)>.15){
    const p=e.group.position;
    const slide=moveCircleSlide(p.x,p.z,e.knockVX*dt,e.knockVZ*dt,e.collisionRadius,buildings.filter(b=>b.alive),SETTINGS.world);
@@ -1194,7 +1252,8 @@ function updateEnemies(dt){
   }
   // Do not mutate shared enemy materials when one enemy takes damage.
   e.group.scale.setScalar(enemyRenderScale(e));
-  e.group.rotation.z=Math.sin(state.time*32)*Math.min(.16,e.stun*.23);
+  e.group.rotation.x=e.recoilPitch;
+  e.group.rotation.z=e.recoilRoll;
   if(dist<5&&e.kind==='tank'&&e.stun<=0&&e.cooldown<1)damagePlayer(2.5);
   // Shelter damage comes from projectiles, not a hidden random damage ticker.
  }
@@ -1463,6 +1522,8 @@ function updateHUD(){
  $('slamStatus').textContent=state.slamCooldown>0?`Q · IMPACTO ${state.slamCooldown.toFixed(1)}s`:'Q · IMPACTO PRONTO';
  $('doubleStatus').textContent=state.doubleCooldown>0?`V · DUPLO ${state.doubleCooldown.toFixed(1)}s`:'V · GOLPE DUPLO PRONTO';
  $('grabStatus').textContent=holdingEnemy?'G · ARREMESSAR INIMIGO':'G · AGARRAR INIMIGO';
+ $('tankStatus').textContent=state.tankCooldown>0?`T · ESMAGAR TANQUE ${state.tankCooldown.toFixed(1)}s`:'T · ESMAGAR TANQUE PRONTO';
+ $('spinStatus').textContent=state.spinCooldown>0?`H · GIRAR ${state.spinCooldown.toFixed(1)}s`:holdingEnemy?'H · GIRAR E LANÇAR':'H · AGARRE COM G';
  const stage=stages[state.stage];
  $('missionTag').textContent=`FASE ${String(state.stage+1).padStart(2,'0')}/${stages.length} • ${stage.title}`;
  const progress=chapterProgress(stage,mission);
@@ -1513,10 +1574,10 @@ function resetGame(){
  for(const o of effects){scene.remove(o.mesh);o.mesh.material.dispose();o.mesh.geometry.dispose();}
  for(const o of [...enemies,...cars,...projectiles]){(o.group||o.mesh).removeFromParent();}
  for(const b of buildings){if(!b.alive){b.group.position.y=0;b.group.rotation.set(0,0,0);scene.add(b.group);b.group.visible=true;}}
- particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];holdingCar=null;holdingEnemy=null;collapseSoundCooldown=0;
+ particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];holdingCar=null;holdingEnemy=null;tankCrushTarget=null;collapseSoundCooldown=0;
  for(const b of buildings){b.alive=true;b.fall=0;b.fallFX=0;b.health=b.maxHealth;clearCracks(b);b.group.rotation.set(0,0,0);b.group.position.set(b.x,0,b.z);}
- Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
- player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.landingPower=1;animation.speed=0;
+ Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,tankCooldown:0,spinCooldown:0,tankCrushes:0,spinThrows:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
+ player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.tankCrushPose=0;animation.pendingTankCrush=false;animation.spinThrowPose=0;animation.pendingSpinThrow=false;animation.spinAngle=0;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.landingPower=1;animation.speed=0;
  animation.jumpCharge=0;animation.chargingJump=false;animation.airStartY=0;animation.airSmash=false;animation.climbing=false;animation.climbFace=null;animation.climbLock=0;animation.groundY=0;footsteps=0;keys.clear();$('damageFlash').style.opacity='0';damageFlashTimer=0;
  makeCarFleet();startMission(0);scene.background.set(stages[0].sky);if(scene.fog)scene.fog.color.set(stages[0].sky);updateHUD();
 }
@@ -1537,7 +1598,7 @@ function wireInput(){
   if(e.repeat)return;
   if(e.code==='Escape'||e.code==='KeyP'){if(state.mode==='playing'||state.mode==='paused')togglePause();else if(state.mode==='menu')$('modal').classList.add('hidden');return;}
   if(state.mode!=='playing')return;
-  if(e.code==='Space')beginJumpCharge();if(e.code==='KeyQ')airSlam();if(e.code==='KeyX')thunderclap();if(e.code==='KeyF')punch();if(e.code==='KeyE')handleCarAction();if(e.code==='KeyG')grabEnemyAction();if(e.code==='KeyV')doubleSmash();if(e.code==='KeyR')roar();
+  if(e.code==='Space')beginJumpCharge();if(e.code==='KeyQ')airSlam();if(e.code==='KeyX')thunderclap();if(e.code==='KeyF')punch();if(e.code==='KeyE')handleCarAction();if(e.code==='KeyG')grabEnemyAction();if(e.code==='KeyT')tankCrushAction();if(e.code==='KeyH')spinThrowAction();if(e.code==='KeyV')doubleSmash();if(e.code==='KeyR')roar();
   if(e.code==='F7'){avatarCompare();return;}
   if(e.code==='KeyM'){state.soundOn=!state.soundOn;audio.setMuted(!state.soundOn);updateAudioButtons();notify(state.soundOn?'SOM ATIVADO':'SOM DESATIVADO');}
  });
@@ -1590,7 +1651,7 @@ function avatarInfo(text,kind='loading'){
 function reloadAvatar(){
  if(avatarRequest)return avatarRequest;
  avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando o Hulk 3D...','loading');
- avatarRequest=import('./avatar.js?v=2.2').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
+ avatarRequest=import('./avatar.js?v=2.3').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
    onStatus:(stage,data)=>{
     if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
    }
@@ -1622,7 +1683,7 @@ function frame(t){
  const dt=Math.min(.033,(t-lastT)/1000||.016);lastT=t;
  if(state.mode==='playing'){
   state.time+=dt;state.hurtCooldown=Math.max(0,state.hurtCooldown-dt);state.shotCooldown=Math.max(0,state.shotCooldown-dt);state.slamCooldown=Math.max(0,state.slamCooldown-dt);state.clapCooldown=Math.max(0,state.clapCooldown-dt);state.doubleCooldown=Math.max(0,state.doubleCooldown-dt);
-  state.pickCooldown=Math.max(0,state.pickCooldown-dt);state.chainWindow=Math.max(0,state.chainWindow-dt);
+  state.pickCooldown=Math.max(0,state.pickCooldown-dt);state.tankCooldown=Math.max(0,state.tankCooldown-dt);state.spinCooldown=Math.max(0,state.spinCooldown-dt);state.chainWindow=Math.max(0,state.chainWindow-dt);
   state.queuedPunch=Math.max(0,state.queuedPunch-dt);if(state.queuedPunch>0&&state.shotCooldown<=0)punch();
   if(state.chainWindow<=0&&state.chainStep>0){state.chainStep=0;animation.comboStep=0;}
   state.rageTime=Math.max(0,state.rageTime-dt);
@@ -1669,8 +1730,8 @@ function fatal(error,phase='startup'){
 }
 try{
  initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.2';
- window.__HULK_DIAGNOSTICS=()=>({version:'2.2',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.3';
+ window.__HULK_DIAGNOSTICS=()=>({version:'2.3',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
  // Block Start until the requested mesh succeeds or fails; don't silently hide load errors.
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();

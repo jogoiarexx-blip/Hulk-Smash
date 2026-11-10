@@ -54,7 +54,7 @@ test('Runtime applies landing strength and avoids planted foot IK while compress
  const game=fs.readFileSync(new URL('../src/game.js',import.meta.url),'utf8');
  const avatar=fs.readFileSync(new URL('../src/avatar.js',import.meta.url),'utf8');
  assert.ok(game.includes('animation.landingPower=clamp(.45+animation.airPeak/30,.45,1.55);'));
- assert.ok(game.includes("import('./avatar.js?v=2.2')"));
+ assert.match(game,/import\('\.\/avatar\.js\?v=\d+\.\d+'\)/);
  assert.ok(avatar.includes('!(a.landTime>0)'));
- assert.ok(avatar.includes("from './avatar-poses.mjs?v=2.2'"));
+ assert.match(avatar,/from '\.\/avatar-poses\.mjs\?v=\d+\.\d+'/);
 });
