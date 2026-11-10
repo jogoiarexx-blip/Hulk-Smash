@@ -279,7 +279,7 @@ function makeHulk(){
    leftLeg:legs[0],rightLeg:legs[1],leftShin:shins[0],rightShin:shins[1],
    torso,body,head:headGroup,jaw,rig,attack:0,attackHand:1,punchCount:0,pendingPunch:false,comboStep:0,slamPose:0,pendingSlam:false,slamRadius:15.5,clapPose:0,pendingClap:false,doubleSmashPose:0,pendingDoubleSmash:false,grabEnemyPose:0,
    throwPose:0,grabPose:0,roarPose:0,hitReact:0,walk:0,speed:0,velocity:vec(),
-   jumpVelocity:0,onGround:true,airPeak:0,landTime:0,shadow,
+   jumpVelocity:0,onGround:true,airPeak:0,landTime:0,landingPower:1,shadow,
    jumpCharge:0,chargingJump:false,airStartY:0,airSmash:false,climbing:false,climbFace:null,climbLock:0,groundY:0};
  playerRig.rotation.y=Math.PI;
  player.position.set(0,0,0);
@@ -710,7 +710,7 @@ function releaseJumpCharge(){
  if(state.mode!=='playing'||!animation.onGround)return;
  animation.jumpVelocity=chargedJumpSpeed(seconds,state.rageTime>0);
  animation.airStartY=player.position.y;
- animation.onGround=false;animation.airPeak=0;animation.landTime=0;
+ animation.onGround=false;animation.airPeak=0;animation.landTime=0;animation.landingPower=1;
  if(seconds>.55){
   notify(`SUPER PULO: ${Math.round(chargeRatio(seconds)*100)}%`,.8);cameraShake(.2);
   shockRing(player.position.x,player.position.z,2+chargeRatio(seconds)*5,'#bdf976',.33,player.position.y);
@@ -761,7 +761,7 @@ function updateClimb(dt,up,down,left,right){
   player.position.x-=face.normalX*(SETTINGS.playerRadius+.8);
   player.position.z-=face.normalZ*(SETTINGS.playerRadius+.8);
   endClimb(false);animation.onGround=true;animation.groundY=b.h;animation.jumpVelocity=0;
-  animation.landTime=.26;notify('TELHADO ALCANÇADO!',1.0);playSound('step',.6);
+  animation.landTime=.26;animation.landingPower=.65;notify('TELHADO ALCANÇADO!',1.0);playSound('step',.6);
  }else if(player.position.y<=.03&&down){
   endClimb(false);animation.onGround=true;animation.jumpVelocity=0;player.position.y=0;
  }
@@ -1009,6 +1009,15 @@ function updatePlayer(dt){
   const landing=animation.jumpVelocity<=0?landingHeight(player.position.x,player.position.z,oldY,nextY,buildings):null;
   if(landing!==null){
    player.position.y=landing;animation.groundY=landing;animation.onGround=true;animation.jumpVelocity=0;animation.landTime=.26;
+   animation.landingPower=clamp(.45+animation.airPeak/30,.45,1.55);
+   if(animation.airPeak>8){
+    const dustCount=Math.min(12,Math.ceil(animation.landingPower*5));
+    for(let i=0;i<dustCount;i++){
+     const angle=i*Math.PI*2/dustCount;
+     particle(player.position.clone().add(vec(Math.cos(angle)*.85,.18,Math.sin(angle)*.85)),
+      '#8a9087',.20+animation.landingPower*.06,.32,vec(Math.cos(angle)*3,1.8,Math.sin(angle)*3));
+    }
+   }
    if(animation.airSmash){
     animation.airSmash=false;slam(15+Math.min(animation.airPeak*.2,6),true);
    }else if(animation.airPeak>=16){
@@ -1029,7 +1038,15 @@ function updatePlayer(dt){
  }
  if(animation.onGround&&!animation.chargingJump&&gait>.16){
   footsteps-=dt;
-  if(footsteps<=0){playSound('step',.13+gait*.08);footsteps=(sprint?.23:.35);}
+  if(footsteps<=0){
+   playSound('step',.13+gait*.08);
+   if(sprint&&animation.speed>12){
+    cameraShake(.035);
+    particle(player.position.clone().add(vec(rand(-.7,.7),.12,rand(-.7,.7))),
+     '#8c9188',.2,.30,vec(rand(-1,1),1.7,rand(-1,1)));
+   }
+   footsteps=(sprint?.23:.35);
+  }
  }else footsteps=0;
  animation.shadow.position.y=.04-player.position.y;
  animation.shadow.scale.setScalar(1+player.position.y*.07);
@@ -1499,7 +1516,7 @@ function resetGame(){
  particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];holdingCar=null;holdingEnemy=null;collapseSoundCooldown=0;
  for(const b of buildings){b.alive=true;b.fall=0;b.fallFX=0;b.health=b.maxHealth;clearCracks(b);b.group.rotation.set(0,0,0);b.group.position.set(b.x,0,b.z);}
  Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
- player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.speed=0;
+ player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.landingPower=1;animation.speed=0;
  animation.jumpCharge=0;animation.chargingJump=false;animation.airStartY=0;animation.airSmash=false;animation.climbing=false;animation.climbFace=null;animation.climbLock=0;animation.groundY=0;footsteps=0;keys.clear();$('damageFlash').style.opacity='0';damageFlashTimer=0;
  makeCarFleet();startMission(0);scene.background.set(stages[0].sky);if(scene.fog)scene.fog.color.set(stages[0].sky);updateHUD();
 }
@@ -1573,7 +1590,7 @@ function avatarInfo(text,kind='loading'){
 function reloadAvatar(){
  if(avatarRequest)return avatarRequest;
  avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando o Hulk 3D...','loading');
- avatarRequest=import('./avatar.js?v=2.0').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
+ avatarRequest=import('./avatar.js?v=2.2').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
    onStatus:(stage,data)=>{
     if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
    }
@@ -1652,8 +1669,8 @@ function fatal(error,phase='startup'){
 }
 try{
  initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.1';
- window.__HULK_DIAGNOSTICS=()=>({version:'2.1',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.2';
+ window.__HULK_DIAGNOSTICS=()=>({version:'2.2',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
  // Block Start until the requested mesh succeeds or fails; don't silently hide load errors.
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();

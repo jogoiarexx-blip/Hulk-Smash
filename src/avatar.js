@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=2.0';
+import { avatarPose, blendAvatarPose } from './avatar-poses.mjs?v=2.2';
 import { resolveHulkSkeleton } from './rig-map.mjs?v=2.0';
 import { contactHands, dampWeight, footStance, reachLimit } from './contact-ik.mjs?v=2.0';
 
@@ -164,7 +164,7 @@ export async function loadHulkAvatar({rig,legacyParts,url='./assets/models/hulk.
     solveTwoLink(bones.rightArm,bones.rightForearm,bones.rightHand,new THREE.Vector3(climbTargets.right.x,climbTargets.right.y,climbTargets.right.z),climbIK*.76);
    }
    // Ankle grounding on flat city streets and roofs. Airborne legs are untouched.
-   const mayPlant=a.onGround&&!a.climbing&&!a.chargingJump&&(a.speed||0)>.3;
+   const mayPlant=a.onGround&&!a.climbing&&!a.chargingJump&&!(a.landTime>0)&&(a.speed||0)>.3;
    for(const side of ['left','right']){
     const stance=mayPlant?footStance(a.walk||0,side,(a.speed||0)/11.5):0;
     footIK[side]=dampWeight(footIK[side],stance,dt,14);
