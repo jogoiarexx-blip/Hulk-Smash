@@ -11,6 +11,8 @@ import { nextChainStep, chainMultiplier, clapImpactTimerCrossed, throwLiftProgre
 import { createCheckpoint, loadCheckpoint, storeCheckpoint, eraseCheckpoint } from './progress.mjs?v=2.4';
 import { PAD, readGamepad, buttonPressed, buttonReleased } from './gamepad.mjs?v=2.4';
 import { enemyTactics, threatMovement, aiFireInterval } from './enemy-ai.mjs?v=2.4';
+import { attackPattern, volleyDirections, projectileThreat } from './attack-patterns.mjs?v=2.5';
+import { particleQuota, rubbleDustCount, shouldRenderStructuralDust } from './fx-budget.mjs?v=2.5';
 
 // HULK: SMASH CITY — playable fan-made Three.js prototype.
 // 3D models and textures are procedural; music, ambience and SFX are bundled OGG files.
@@ -28,7 +30,7 @@ let newAvatar=null,avatarState='loading',avatarError='',avatarRequest=null;
 const legacyPartsForAvatar=[];
 const audio=new AudioEngine();
 let footsteps=0, qualityClock=0, fpsClock=0, frameAccumulator=0, frameSamples=0;
-let particles=[], debris=[], structures=[], effects=[], buildings=[], enemies=[], cars=[], projectiles=[], decorations=[];
+let particles=[], particlePool=[], debris=[], structures=[], effects=[], buildings=[], enemies=[], cars=[], projectiles=[], decorations=[];
 let mission=null,holdingCar=null, holdingEnemy=null, tankCrushTarget=null, windClock=0, toastTimer=0, lastT=0, damageFlashTimer=0, collapseSoundCooldown=0;
 const keys = new Set();
 let controller=null;
@@ -58,6 +60,7 @@ function initMats(){
   geometry.sphere = new THREE.SphereGeometry(1,12,9);
   geometry.lowSphere = new THREE.IcosahedronGeometry(1,1);
   geometry.cylinder = new THREE.CylinderGeometry(1,1,1,9);
+  geometry.ring=new THREE.RingGeometry(.92,1.04,48);
   rubbleMaterials=rubbleColors.map(c=>material(c));
   crackMaterial=new THREE.LineBasicMaterial({color:'#202b2b',transparent:true,opacity:.83,depthTest:true});
 }
@@ -361,7 +364,7 @@ function spawnEnemy(kind,where=null){
   }
   group.position.y=rand(12,18);
  }
- const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6,recoilPitch:0,recoilRoll:0,spinThrow:false,aiClock:0,aiPhase:rand(0,Math.PI*2)};
+ const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6,recoilPitch:0,recoilRoll:0,spinThrow:false,aiClock:0,aiPhase:rand(0,Math.PI*2),attackCount:0,warningTime:0,warningTotal:0,warningPattern:null,warningAim:null};
  enemies.push(obj);return obj;
 }
 function explosion(x,y,z,color='#ffaa54',power=1){
@@ -371,10 +374,25 @@ function explosion(x,y,z,color='#ffaa54',power=1){
  shockRing(x,z,4*power,color,.52);
  cameraShake(power*.38);playSound('boom',power);
 }
+function releaseParticle(p){
+ scene.remove(p.mesh);
+ if(particlePool.length<72)particlePool.push(p);
+ else p.mesh.material.dispose();
+}
 function particle(pos,color,size,life,velocity){
- if(particles.length>=170){const old=particles.shift();scene.remove(old.mesh);old.mesh.material.dispose();}
- const p=mesh(scene,geometry.lowSphere,new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false}),pos.x,pos.y,pos.z,size,size,size);
- particles.push({mesh:p,pos:p.position,velocity:velocity.clone(),life,total:life});
+ const distance=player?.position?Math.hypot(pos.x-player.position.x,pos.z-player.position.z):0;
+ const quota=particleQuota(distance,particles.length,170);
+ if(quota<=0||Math.random()>quota)return;
+ let p=particles.length>=170?particles.shift():(particlePool.pop()||null);
+ if(!p){
+  const m=mesh(scene,geometry.lowSphere,new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false}),pos.x,pos.y,pos.z,size,size,size);
+  p={mesh:m,pos:m.position,velocity:velocity.clone(),life,total:life};
+ }else{
+  p.mesh.position.copy(pos);p.mesh.scale.set(size,size,size);p.mesh.material.color.set(color);
+  p.mesh.material.opacity=.9;p.velocity.copy(velocity);p.life=life;p.total=life;
+  if(!p.mesh.parent)scene.add(p.mesh);
+ }
+ particles.push(p);
 }
 function spawnRubble(building,impact=1){
  const {x,z,w,d,h}=building;
@@ -386,7 +404,8 @@ function spawnRubble(building,impact=1){
   const m=mesh(scene,geometry.box,rubbleMaterials[Math.floor(rand(0,rubbleMaterials.length))],x+rand(-w*.46,w*.46),rand(2,h),z+rand(-d*.46,d*.46),size,size*rand(.5,1.35),size,true);
   debris.push({mesh:m,vel:vec(rand(-17,17)*impact,rand(7,20),rand(-17,17)*impact),spin:vec(rand(-7,7),rand(-7,7),rand(-7,7)),life:rand(3.3,7.0),ground:size*.38});
  }
- for(let j=0;j<12;j++)particle(vec(x+rand(-w*.45,w*.45),rand(2,Math.min(h,30)),z+rand(-d*.4,d*.4)),'#9b9b8b',rand(.8,2.7),rand(1,2.3),vec(rand(-12,12),rand(1,9),rand(-12,12)));
+ const dust=rubbleDustCount(Math.hypot(x-player.position.x,z-player.position.z),particles.length);
+ for(let j=0;j<dust;j++)particle(vec(x+rand(-w*.45,w*.45),rand(2,Math.min(h,30)),z+rand(-d*.4,d*.4)),'#9b9b8b',rand(.8,2.7),rand(1,2.3),vec(rand(-12,12),rand(1,9),rand(-12,12)));
 }
 // When a tower fails, its floors separate into large, independently simulated chunks.
 // Segments use cached building materials; no new textures are generated mid-fight.
@@ -426,7 +445,9 @@ function updateStructuralCollapse(dt){
   part.mesh.rotation.z=clamp(part.mesh.rotation.z+part.spin.z*dt,-.44,.44);
   if(landed&&!part.firstLanding){
    part.firstLanding=true;
-   for(let k=0;k<4;k++)particle(vec(b.x+rand(-b.w*.4,b.w*.4),.5,b.z+rand(-b.d*.4,b.d*.4)),
+   const dustDistance=Math.hypot(b.x-player.position.x,b.z-player.position.z);
+    if(shouldRenderStructuralDust(dustDistance,particles.length))
+    for(let k=0;k<(dustDistance<38?4:2);k++)particle(vec(b.x+rand(-b.w*.4,b.w*.4),.5,b.z+rand(-b.d*.4,b.d*.4)),
       '#a49c89',rand(.6,1.35),rand(.6,1.15),vec(rand(-3.5,3.5),rand(2,7),rand(-3.5,3.5)));
    if(Math.hypot(b.x-player.position.x,b.z-player.position.z)<39){
     cameraShake(.14);
@@ -457,10 +478,13 @@ function updateStructuralCollapse(dt){
  }
 }
 function shockRing(x,z,radius,color='#b3ef59',life=.6,height=0){
- if(effects.length>=SETTINGS.maxEffects){const old=effects.shift();scene.remove(old.mesh);old.mesh.geometry.dispose();old.mesh.material.dispose();}
- const geo=new THREE.RingGeometry(.92,1.04,48);
+ if(effects.length>=SETTINGS.maxEffects){
+  const old=effects.shift();scene.remove(old.mesh);
+  if(old.mesh.geometry!==geometry.ring)old.mesh.geometry.dispose();
+  old.mesh.material.dispose();
+ }
  const mat=new THREE.MeshBasicMaterial({color,transparent:true,opacity:.75,depthWrite:false,side:THREE.DoubleSide});
- const m=new THREE.Mesh(geo,mat);m.position.set(x,height+.19,z);m.rotation.x=-Math.PI/2;scene.add(m);
+ const m=new THREE.Mesh(geometry.ring,mat);m.position.set(x,height+.19,z);m.rotation.x=-Math.PI/2;scene.add(m);
  effects.push({mesh:m,life,total:life,radius});
 }
 function cameraShake(intensity){state.shake=Math.min(1.5,state.shake+intensity);}
@@ -1256,19 +1280,15 @@ function updateEnemies(dt){
    const steer=threatMovement(to.x,to.z,tactics);
    moveEnemySafely(e,vec(steer.x,0,steer.z),dt*tactics.speed,e.kind==='tank'?3.1:2);
   }
-  if(e.kind==='tank'){
-   if(e.cooldown<=0&&e.stun<=0&&dist<75){
-    const fired=fireProjectile(e,3.6);
-    e.cooldown=fired?aiFireInterval(e.kind,!!e.boss,state.stage)*rand(.85,1.15):.65;
-   }
-  }else{
+  if(e.kind!=='tank'){
    e.bob+=dt*2;
    e.group.position.y=smooth(e.group.position.y,14+Math.sin(e.bob)*3,dt,2);
-   if(e.cooldown<=0&&e.stun<=0&&dist<75){
-    const fired=fireProjectile(e,1.4);
-    e.cooldown=fired?aiFireInterval(e.kind,false,state.stage)*rand(.85,1.15):.55;
-   }
    for(const part of e.group.children){if(part.userData.rotor)part.rotation.y+=dt*35;}
+  }
+  if(e.warningPattern)updateEnemyTelegraph(e,dt);
+  else if(e.cooldown<=0&&e.stun<=0&&dist<75){
+   const aimedAt=defending?mission.point.clone().add(vec(0,1.8,0)):player.position.clone().add(vec(0,2,0));
+   if(!startEnemyTelegraph(e,aimedAt))e.cooldown=.65;
   }
   // Do not mutate shared enemy materials when one enemy takes damage.
   e.group.scale.setScalar(enemyRenderScale(e));
@@ -1278,17 +1298,65 @@ function updateEnemies(dt){
   // Shelter damage comes from projectiles, not a hidden random damage ticker.
  }
 }
-function fireProjectile(enemy,height){
- if(projectiles.length>38)return false;
- const start=enemy.group.position.clone().add(vec(0,height,0));
- const shelterShot=mission?.kind==='defense'&&mission.held<stages[state.stage].target;
- const aim=shelterShot?mission.point.clone().add(vec(0,1.8,0)):player.position.clone().add(vec(0,2,0));
- if(sweptBuildingHit(start,aim,buildings,.28))return false; // No shots through intact buildings.
- const direction=aim.sub(start).normalize();
- const ball=mesh(scene,geometry.sphere,mats.fire,start.x,start.y,start.z,.41,.41,.41);
- projectiles.push({mesh:ball,velocity:direction.multiplyScalar(enemy.kind==='tank'?28:35),life:5,damage:enemy.kind==='tank'?9:6,shelter:shelterShot});
- playSound('laser');
+function startEnemyTelegraph(e,aim){
+ if(projectiles.length>=38)return false;
+ const height=e.kind==='tank'?3.6:1.4;
+ const start=e.group.position.clone().add(vec(0,height,0));
+ if(sweptBuildingHit(start,aim,buildings,.28))return false;
+ const pattern=attackPattern(e.kind,!!e.boss,e.attackCount++);
+ e.warningTime=pattern.warn;e.warningTotal=pattern.warn;
+ e.warningPattern=pattern;e.warningAim=aim.clone();
+ const targetGround=Math.max(0,aim.y-2);
+ if(Math.hypot(aim.x-player.position.x,aim.z-player.position.z)<90){
+  shockRing(aim.x,aim.z,e.boss?6.5:4.8,'#ff8d51',pattern.warn,targetGround);
+ }
  return true;
+}
+function updateEnemyTelegraph(e,dt){
+ if(!e.warningPattern)return;
+ if(e.stun>0){
+  // Cancel the volley: a stunned unit must give another visible warning before firing.
+  e.warningPattern=null;e.warningAim=null;e.warningTime=0;
+  e.cooldown=Math.max(e.cooldown,.6);return;
+ }
+ e.warningTime=Math.max(0,e.warningTime-dt);
+ if(e.warningTime>0)return;
+ const pattern=e.warningPattern,aim=e.warningAim;
+ e.warningPattern=null;e.warningAim=null;
+ const fired=fireProjectile(e,e.kind==='tank'?3.6:1.4,pattern,aim);
+ e.cooldown=fired?aiFireInterval(e.kind,!!e.boss,state.stage)*pattern.cooldown*rand(.90,1.12):.65;
+}
+function fireProjectile(enemy,height,pattern,aim){
+ if(projectiles.length>=38||!aim)return false;
+ const start=enemy.group.position.clone().add(vec(0,height,0));
+ if(sweptBuildingHit(start,aim,buildings,.28))return false;
+ const direction=aim.clone().sub(start).normalize();
+ const vectors=volleyDirections(direction,pattern);
+ let fired=0;
+ for(const v of vectors){
+  if(projectiles.length>=38)break;
+  const ball=mesh(scene,geometry.sphere,mats.fire,start.x,start.y,start.z,.41,.41,.41);
+  projectiles.push({mesh:ball,velocity:vec(v.x,v.y,v.z).multiplyScalar((enemy.kind==='tank'?28:35)*pattern.speed),
+   life:5,damage:(enemy.kind==='tank'?9:6)*pattern.damage,shelter:mission?.kind==='defense'&&mission.held<stages[state.stage].target});
+  fired++;
+ }
+ if(fired)playSound('laser',pattern.count>1?.7:.5);
+ return fired>0;
+}
+function updateDangerWarning(){
+ let label='',eta=Infinity;
+ for(const p of projectiles){
+  const threat=projectileThreat(p,player.position.clone().add(vec(0,2.6,0)));
+  if(threat&&threat.time<eta){eta=threat.time;label='⚠ PROJÉTIL SE APROXIMANDO — DESVIE!';}
+ }
+ for(const e of enemies){
+  if(!e.alive||e.held||e.thrown||!e.warningPattern||!e.warningAim)continue;
+  if(Math.hypot(e.warningAim.x-player.position.x,e.warningAim.z-player.position.z)>8)continue;
+  if(e.warningTime<eta){eta=e.warningTime;label=e.boss?'⚠ CHEFE PREPARANDO DISPARO!':e.kind==='tank'?'⚠ CANHÃO NA SUA DIREÇÃO!':'⚠ DRONES NA SUA MIRA!';}
+ }
+ const indicator=$('dangerIndicator');
+ indicator.hidden=!label;
+ if(label)$('dangerLabel').textContent=label;
 }
 function updateProjectiles(dt){
  for(let i=projectiles.length-1;i>=0;i--){
@@ -1337,7 +1405,7 @@ function updateEffects(dt){
   const p=particles[i];p.life-=dt;p.pos.addScaledVector(p.velocity,dt);
   p.velocity.y-=SETTINGS.gravity*.4*dt;p.mesh.material.opacity=Math.max(0,p.life/p.total)*.88;
   p.mesh.scale.multiplyScalar(1+dt*.22);
-  if(p.life<=0){scene.remove(p.mesh);p.mesh.material.dispose();particles.splice(i,1);}
+  if(p.life<=0){particles.splice(i,1);releaseParticle(p);}
  }
  for(let i=debris.length-1;i>=0;i--){
   const d=debris[i];d.life-=dt;d.vel.y-=SETTINGS.gravity*dt;
@@ -1352,7 +1420,7 @@ function updateEffects(dt){
    const travel=e.radius*t;e.mesh.position.copy(e.origin).addScaledVector(e.direction,travel).add(vec(0,3.5,0));
    e.mesh.scale.set(2+travel*1.20,5+travel*.30,1);e.mesh.material.opacity=(1-t)*.48;
   }else{e.mesh.scale.setScalar(.25+e.radius*t);e.mesh.material.opacity=(1-t)*.78;}
-  if(e.life<=0){scene.remove(e.mesh);e.mesh.geometry.dispose();e.mesh.material.dispose();effects.splice(i,1);}
+  if(e.life<=0){scene.remove(e.mesh);if(e.mesh.geometry!==geometry.ring)e.mesh.geometry.dispose();e.mesh.material.dispose();effects.splice(i,1);}
  }
 }
 function updateCamera(dt){
@@ -1645,13 +1713,15 @@ function startGame(){
 }
 function resetGame(checkpoint=null){
  clearMission();
- for(const o of particles){scene.remove(o.mesh);o.mesh.material.dispose();}
+ for(const o of [...particles,...particlePool]){scene.remove(o.mesh);o.mesh.material.dispose();}
+ particlePool=[];
  for(const o of debris)scene.remove(o.mesh);
  for(const o of structures)o.mesh.removeFromParent();
- for(const o of effects){scene.remove(o.mesh);o.mesh.material.dispose();o.mesh.geometry.dispose();}
+ for(const o of effects){scene.remove(o.mesh);o.mesh.material.dispose();if(o.mesh.geometry!==geometry.ring)o.mesh.geometry.dispose();}
  for(const o of [...enemies,...cars,...projectiles]){(o.group||o.mesh).removeFromParent();}
  for(const b of buildings){if(!b.alive){b.group.position.y=0;b.group.rotation.set(0,0,0);scene.add(b.group);b.group.visible=true;}}
- particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];holdingCar=null;holdingEnemy=null;tankCrushTarget=null;collapseSoundCooldown=0;
+ particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];
+ $('dangerIndicator').hidden=true;holdingCar=null;holdingEnemy=null;tankCrushTarget=null;collapseSoundCooldown=0;
  for(const b of buildings){b.alive=true;b.fall=0;b.fallFX=0;b.health=b.maxHealth;clearCracks(b);b.group.rotation.set(0,0,0);b.group.position.set(b.x,0,b.z);}
  Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,tankCooldown:0,spinCooldown:0,tankCrushes:0,spinThrows:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
  player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.tankCrushPose=0;animation.pendingTankCrush=false;animation.spinThrowPose=0;animation.pendingSpinThrow=false;animation.spinAngle=0;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.landingPower=1;animation.speed=0;
@@ -1727,13 +1797,13 @@ function avatarInfo(text,kind='loading'){
  if($('avatarFlip'))$('avatarFlip').hidden=kind!=='ready';
  if($('startButton')){
   $('startButton').disabled=kind==='loading';
-  $('startButton').textContent=kind==='loading'?'CARREGANDO MODELO 3D...':'▶ INICIAR DESTRUIÇÃO';
+  $('startButton').textContent=kind==='loading'?'CARREGANDO MODELO 3D...':'▶ NOVA CAMPANHA';
  }
 }
 function reloadAvatar(){
  if(avatarRequest)return avatarRequest;
  avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando o Hulk 3D...','loading');
- avatarRequest=import('./avatar.js?v=2.4').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
+ avatarRequest=import('./avatar.js?v=2.5').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
    onStatus:(stage,data)=>{
     if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
    }
@@ -1774,7 +1844,7 @@ function frame(t){
   updatePlayer(dt);updateHeldEnemy(dt);updateBuildings(dt);updateCars(dt);updateEnemies(dt);updateProjectiles(dt);updateStructuralCollapse(dt);updateEffects(dt);updateMissionDirector(dt);updateMission();
   if(damageFlashTimer>0){damageFlashTimer-=dt;if(damageFlashTimer<=0)$('damageFlash').style.opacity='0';}
   if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('visible');}
-  state.hudTime-=dt;if(state.hudTime<=0){updateHUD();state.hudTime=.13;}
+  state.hudTime-=dt;if(state.hudTime<=0){updateHUD();updateDangerWarning();state.hudTime=.13;}
  }
  if(newAvatar && state.mode !== 'paused' && state.mode !== 'error'){
   try{newAvatar.update(dt,animation,{time:state.time,rageTime:state.rageTime,holdingCar:!!holdingCar,holdingEnemy:!!holdingEnemy,liftRatio:holdingEnemy?throwLiftProgress(holdingEnemy.liftTime||0,holdingEnemy.liftDuration||.8):0,worldPosition:player.position,climbFace:animation.climbFace});}
@@ -1813,8 +1883,8 @@ function fatal(error,phase='startup'){
 }
 try{
  initMats();buildScene();makeHulk();wireInput();refreshSaveUI();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.4';
- window.__HULK_DIAGNOSTICS=()=>({version:'2.4',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.5';
+ window.__HULK_DIAGNOSTICS=()=>({version:'2.5',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
  // Block Start until the requested mesh succeeds or fails; don't silently hide load errors.
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();
