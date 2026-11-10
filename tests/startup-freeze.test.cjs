@@ -15,6 +15,8 @@ class Vec {constructor(x=0,y=0,z=0){Object.assign(this,{x,y,z});}
  clone(){return new Vec(this.x,this.y,this.z);}
  add(v){this.x+=v.x;this.y+=v.y;this.z+=v.z;return this;}
  sub(v){this.x-=v.x;this.y-=v.y;this.z-=v.z;return this;}
+ addScaledVector(v,scalar){this.x+=v.x*scalar;this.y+=v.y*scalar;this.z+=v.z*scalar;return this;}
+ length(){return Math.sqrt(this.lengthSq());}
  lengthSq(){return this.x*this.x+this.y*this.y+this.z*this.z;}
  normalize(){const l=Math.sqrt(this.lengthSq())||1;this.x/=l;this.y/=l;this.z/=l;return this;}
 }
@@ -30,6 +32,7 @@ function contextFactory(){
  const keys=new Set(),state={camYaw:0,rageTime:0,time:0};
  const player={position:new Vec()},playerRig={rotation:{y:0}};
  const ctx={Math,keys,state,animation,player,playerRig,playerForward:new Vec(0,0,-1),
+  controller:null,PAD:{sprint:10,climb:12},
   SETTINGS:{playerRadius:1.26,gravity:37,world:159},holdingCar:null,holdingEnemy:null,buildings:[],
   footsteps:0,smooth:(_,target)=>target,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
   vec:(x=0,y=0,z=0)=>new Vec(x,y,z),
