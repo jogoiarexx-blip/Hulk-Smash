@@ -8,6 +8,9 @@ import { heavyHitCrossed, grabEligible, throwStep, impactKnockback, enemyCanTake
 import { CAMPAIGN, chapterComplete, chapterProgress, escortAdvance, convoyPosition, shouldDefenderFire } from './campaign.mjs?v=2.0';
 import { applyCarDamage, dentPose } from './deformation.mjs';
 import { nextChainStep, chainMultiplier, clapImpactTimerCrossed, throwLiftProgress } from './combo.mjs';
+import { createCheckpoint, loadCheckpoint, storeCheckpoint, eraseCheckpoint } from './progress.mjs?v=2.4';
+import { PAD, readGamepad, buttonPressed, buttonReleased } from './gamepad.mjs?v=2.4';
+import { enemyTactics, threatMovement, aiFireInterval } from './enemy-ai.mjs?v=2.4';
 
 // HULK: SMASH CITY — playable fan-made Three.js prototype.
 // 3D models and textures are procedural; music, ambience and SFX are bundled OGG files.
@@ -28,6 +31,7 @@ let footsteps=0, qualityClock=0, fpsClock=0, frameAccumulator=0, frameSamples=0;
 let particles=[], debris=[], structures=[], effects=[], buildings=[], enemies=[], cars=[], projectiles=[], decorations=[];
 let mission=null,holdingCar=null, holdingEnemy=null, tankCrushTarget=null, windClock=0, toastTimer=0, lastT=0, damageFlashTimer=0, collapseSoundCooldown=0;
 const keys = new Set();
+let controller=null;
 const input={rightDown:false,mouseX:0,mouseY:0,pointerInside:false};
 const mats = {};
 const geometry = {};
@@ -357,7 +361,7 @@ function spawnEnemy(kind,where=null){
   }
   group.position.y=rand(12,18);
  }
- const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6,recoilPitch:0,recoilRoll:0,spinThrow:false};
+ const obj={group,x,z,kind,health:kind==='tank'?115:60,speed:kind==='tank'?rand(3.1,4.4):rand(5.2,7.2),cooldown:rand(1,3),blink:0,bob:rand(0,9),alive:true,held:false,thrown:false,throwLife:0,fly:vec(),vy:0,stun:0,knockVX:0,knockVZ:0,collisionRadius:kind==='tank'?2.7:1.6,recoilPitch:0,recoilRoll:0,spinThrow:false,aiClock:0,aiPhase:rand(0,Math.PI*2)};
  enemies.push(obj);return obj;
 }
 function explosion(x,y,z,color='#ffaa54',power=1){
@@ -775,7 +779,7 @@ function beginClimb(contact){
 }
 function updateClimb(dt,up,down,left,right){
  const face=animation.climbFace, b=face?.building;
- if(!b?.alive || !keys.has('KeyC')){endClimb(true);return;}
+ if(!b?.alive || !(keys.has('KeyC')||controller?.buttons[PAD.climb])){endClimb(true);return;}
  const vertical=((up?1:0)-(down?1:0))*dt*10.3;
  const lateral=((right?1:0)-(left?1:0))*dt*8;
  const sideX=-face.normalZ,sideZ=face.normalX;
@@ -946,14 +950,19 @@ function updatePlayer(dt){
  const forward=vec(-Math.sin(yaw),0,-Math.cos(yaw));
  const right=vec(Math.cos(yaw),0,-Math.sin(yaw));
  const move=vec(0,0,0);
- const w=keys.has('KeyW')||keys.has('ArrowUp'),s=keys.has('KeyS')||keys.has('ArrowDown');
- const a=keys.has('KeyA')||keys.has('ArrowLeft'),d=keys.has('KeyD')||keys.has('ArrowRight');
- if(w)move.add(forward);if(s)move.sub(forward);if(d)move.add(right);if(a)move.sub(right);
- const moving=move.lengthSq()>.001;
- const sprint=keys.has('ShiftLeft')||keys.has('ShiftRight');
+ const stickX=controller?.moveX||0,stickY=controller?.moveY||0;
+ const w=keys.has('KeyW')||keys.has('ArrowUp')||stickY<-.27,s=keys.has('KeyS')||keys.has('ArrowDown')||stickY>.27;
+ const a=keys.has('KeyA')||keys.has('ArrowLeft')||stickX<-.27,d=keys.has('KeyD')||keys.has('ArrowRight')||stickX>.27;
+ if(keys.has('KeyW')||keys.has('ArrowUp'))move.add(forward);
+ if(keys.has('KeyS')||keys.has('ArrowDown'))move.sub(forward);
+ if(keys.has('KeyD')||keys.has('ArrowRight'))move.add(right);
+ if(keys.has('KeyA')||keys.has('ArrowLeft'))move.sub(right);
+ move.addScaledVector(forward,-stickY);move.addScaledVector(right,stickX);
+ const moveStrength=Math.min(1,move.length()),moving=moveStrength>.001;
+ const sprint=keys.has('ShiftLeft')||keys.has('ShiftRight')||!!controller?.buttons[PAD.sprint];
  if(moving)move.normalize();
  animation.climbLock=Math.max(0,animation.climbLock-dt);
- if(!animation.climbing&&keys.has('KeyC')&&animation.climbLock<=0&&!holdingCar&&!holdingEnemy){
+ if(!animation.climbing&&(keys.has('KeyC')||controller?.buttons[PAD.climb])&&animation.climbLock<=0&&!holdingCar&&!holdingEnemy){
   const contact=findClimbWall(player.position.x,player.position.z,player.position.y,buildings,SETTINGS.playerRadius);
   if(contact)beginClimb(contact);
  }
@@ -969,7 +978,7 @@ function updatePlayer(dt){
    }
   }
   const actionLocked=animation.tankCrushPose>0||animation.spinThrowPose>0;
-  const targetSpeed=actionLocked?0:(animation.chargingJump?3.4:(sprint?19:11.5))*(state.rageTime>0?1.23:1);
+  const targetSpeed=actionLocked?0:(animation.chargingJump?3.4:(sprint?19:11.5))*(state.rageTime>0?1.23:1)*moveStrength;
   const accel=animation.onGround?12.5:4;
   const smoothing=1-Math.exp(-dt*accel);
   animation.velocity.x+=(move.x*targetSpeed-animation.velocity.x)*smoothing;
@@ -1235,19 +1244,30 @@ function updateEnemies(dt){
    const slide=moveCircleSlide(p.x,p.z,e.knockVX*dt,e.knockVZ*dt,e.collisionRadius,buildings.filter(b=>b.alive),SETTINGS.world);
    p.x=slide.x;p.z=slide.z;e.knockVX*=Math.exp(-dt*8);e.knockVZ*=Math.exp(-dt*8);
   }
-  const targetPosition=mission?.kind==='defense'&&mission.held<stages[state.stage].target ? mission.point:player.position;
+  const defending=mission?.kind==='defense'&&mission.held<stages[state.stage].target;
+  const targetPosition=defending?mission.point:player.position;
   const to=targetPosition.clone().sub(e.group.position);to.y=0;
   const dist=to.length();to.normalize();
   const targetYaw=Math.atan2(to.x,to.z);
   e.group.rotation.y+=Math.atan2(Math.sin(targetYaw-e.group.rotation.y),Math.cos(targetYaw-e.group.rotation.y))*Math.min(1,dt*2.5);
+  e.aiClock+=dt;
+  const tactics=enemyTactics(e.kind,dist,e.aiClock+e.aiPhase,e.stun>0,!!e.boss,defending);
+  if(tactics.speed>0){
+   const steer=threatMovement(to.x,to.z,tactics);
+   moveEnemySafely(e,vec(steer.x,0,steer.z),dt*tactics.speed,e.kind==='tank'?3.1:2);
+  }
   if(e.kind==='tank'){
-   if(e.stun<=0&&dist>17)moveEnemySafely(e,to,dt,3.1);
-   if(e.cooldown<=0&&e.stun<=0&&dist<75){fireProjectile(e,3.6);e.cooldown=e.boss?rand(1.15,1.85):rand(2.7,4.2);}
+   if(e.cooldown<=0&&e.stun<=0&&dist<75){
+    const fired=fireProjectile(e,3.6);
+    e.cooldown=fired?aiFireInterval(e.kind,!!e.boss,state.stage)*rand(.85,1.15):.65;
+   }
   }else{
    e.bob+=dt*2;
    e.group.position.y=smooth(e.group.position.y,14+Math.sin(e.bob)*3,dt,2);
-   if(e.stun<=0&&dist>13)moveEnemySafely(e,to,dt,2.0);
-   if(e.cooldown<=0&&e.stun<=0&&dist<75){fireProjectile(e,1.4);e.cooldown=rand(1.9,3.5);}
+   if(e.cooldown<=0&&e.stun<=0&&dist<75){
+    const fired=fireProjectile(e,1.4);
+    e.cooldown=fired?aiFireInterval(e.kind,false,state.stage)*rand(.85,1.15):.55;
+   }
    for(const part of e.group.children){if(part.userData.rotor)part.rotation.y+=dt*35;}
   }
   // Do not mutate shared enemy materials when one enemy takes damage.
@@ -1259,14 +1279,16 @@ function updateEnemies(dt){
  }
 }
 function fireProjectile(enemy,height){
- if(projectiles.length>38)return;
+ if(projectiles.length>38)return false;
  const start=enemy.group.position.clone().add(vec(0,height,0));
  const shelterShot=mission?.kind==='defense'&&mission.held<stages[state.stage].target;
  const aim=shelterShot?mission.point.clone().add(vec(0,1.8,0)):player.position.clone().add(vec(0,2,0));
+ if(sweptBuildingHit(start,aim,buildings,.28))return false; // No shots through intact buildings.
  const direction=aim.sub(start).normalize();
  const ball=mesh(scene,geometry.sphere,mats.fire,start.x,start.y,start.z,.41,.41,.41);
  projectiles.push({mesh:ball,velocity:direction.multiplyScalar(enemy.kind==='tank'?28:35),life:5,damage:enemy.kind==='tank'?9:6,shelter:shelterShot});
  playSound('laser');
+ return true;
 }
 function updateProjectiles(dt){
  for(let i=projectiles.length-1;i>=0;i--){
@@ -1505,7 +1527,7 @@ function updateMission(){
   if(state.stage===stages.length-1){finishGame(true);return;}
   state.stage++;state.health=clamp(state.health+35,0,100);
   const next=stages[state.stage];scene.background.set(next.sky);if(scene.fog)scene.fog.color.set(next.sky);
-  startMission(state.stage);playSound('success');
+  startMission(state.stage);saveCampaignCheckpoint();playSound('success');
  }
 }
 function updateHUD(){
@@ -1550,11 +1572,11 @@ function drawMinimap(){
  ctx.strokeStyle='#b8e36c';ctx.lineWidth=1;ctx.strokeRect(.5,.5,w-1,h-1);
 }
 function finishGame(win,reason=''){ 
- state.mode=win?'won':'dead';if(win){audio.setPaused(false);playSound('success');}else audio.setPaused(true);
+ state.mode=win?'won':'dead';if(win){eraseCheckpoint(safeStorage());refreshSaveUI();audio.setPaused(false);playSound('success');}else audio.setPaused(true);
  $('modal').classList.remove('hidden');$('modalKicker').textContent=win?'CAMPANHA CONCLUÍDA':'FIM DE JOGO';
  $('modalTitle').textContent=win?'A CIDADE ESTÁ A SALVO':(reason||'HULK FOI DERROTADO');
  $('modalBody').innerHTML=`<p>${win?'Você impediu o plano militar e salvou o centro urbano!':'A missão fracassou. Reorganize sua estratégia e tente novamente.'}</p><p><b>${state.destroyed}</b> prédios demolidos &nbsp;·&nbsp; <b>${state.kills}</b> inimigos derrotados &nbsp;·&nbsp; <b>${state.score.toLocaleString('pt-BR')}</b> pontos</p>`;
- $('resumeButton').classList.add('hidden');$('restartButton').classList.remove('hidden');$('controlsHint').hidden=true;
+ $('resumeButton').classList.add('hidden');$('restartButton').classList.remove('hidden');$('restartButton').textContent=!win&&storedCampaign()?'↻ RECOMEÇAR DO CHECKPOINT':'REINICIAR CAMPANHA';$('controlsHint').hidden=true;
 }
 function setModalHow(){
  $('modal').classList.remove('hidden');$('modalKicker').textContent='CONTROLES';$('modalTitle').textContent='COMO JOGAR';
@@ -1562,11 +1584,66 @@ function setModalHow(){
  $('resumeButton').classList.remove('hidden');$('restartButton').classList.add('hidden');
  $('resumeButton').textContent=state.mode==='menu'?'VOLTAR':'CONTINUAR';
 }
+function safeStorage(){
+ try{return window.localStorage;}catch{return null;}
+}
+function storedCampaign(){return loadCheckpoint(safeStorage(),stages.length);}
+function refreshSaveUI(){
+ const saved=storedCampaign();
+ $('continueButton').hidden=!saved;
+ $('saveStatus').textContent=saved?`SALVO: FASE ${saved.stage+1}/${stages.length} — ${stages[saved.stage].title}`:'CHECKPOINT AUTOMÁTICO AO CONCLUIR UMA FASE';
+ return saved;
+}
+function saveCampaignCheckpoint(){
+ const data=createCheckpoint(state.stage,state,stages.length);
+ if(data&&storeCheckpoint(safeStorage(),data)){
+  refreshSaveUI();notify(`CHECKPOINT SALVO — FASE ${data.stage+1}`,1.8);
+ }
+}
+function continueGame(){
+ const saved=storedCampaign();
+ if(!saved){refreshSaveUI();notify('NENHUM CHECKPOINT ENCONTRADO');return;}
+ resetGame(saved);state.mode='playing';
+ $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('hud').hidden=false;$('controlsHint').hidden=false;
+ notify(`CONTINUANDO FASE ${saved.stage+1}/${stages.length}`,1.8);
+ initAudio();audio.setPaused(false);
+}
+// Poll once per animation frame, with edge-triggered buttons so held keys do not repeat.
+function pollController(dt){
+ let pad=null;
+ try{pad=Array.from(navigator.getGamepads?.()||[]).find(p=>p?.connected&&p.mapping==='standard')||null;}catch{pad=null;}
+ const next=readGamepad(pad),previous=controller;
+ controller=next;
+ if(!next){
+  if(previous){animation.chargingJump=false;animation.jumpCharge=0;$('gamepadStatus').textContent='⌨ TECLADO E MOUSE';}
+  return;
+ }
+ if(!previous)$('gamepadStatus').textContent='🎮 CONTROLE CONECTADO';
+ if(buttonPressed(previous,next,PAD.pause)){
+  if(state.mode==='menu'){if(storedCampaign())continueGame();else startGame();}
+  else if(state.mode==='playing'||state.mode==='paused')togglePause();
+ }
+ if(state.mode!=='playing')return;
+ if(buttonPressed(previous,next,PAD.jump))beginJumpCharge();
+ if(buttonReleased(previous,next,PAD.jump))releaseJumpCharge();
+ if(buttonPressed(previous,next,PAD.punch))punch();
+ if(buttonPressed(previous,next,PAD.grabEnemy))grabEnemyAction();
+ if(buttonPressed(previous,next,PAD.car))handleCarAction();
+ if(buttonPressed(previous,next,PAD.clap))thunderclap();
+ if(buttonPressed(previous,next,PAD.slam))airSlam();
+ if(buttonPressed(previous,next,PAD.tankCrush))tankCrushAction();
+ if(buttonPressed(previous,next,PAD.spinThrow))spinThrowAction();
+ if(buttonPressed(previous,next,PAD.doubleSmash))doubleSmash();
+ if(buttonPressed(previous,next,PAD.rage))roar();
+ state.camYaw-=next.cameraX*dt*2.4;
+ state.camPitch=clamp(state.camPitch-next.cameraY*dt*1.5,.18,1.12);
+}
 function startGame(){
+ eraseCheckpoint(safeStorage());refreshSaveUI();
  resetGame();state.mode='playing';$('menu').classList.add('hidden');$('modal').classList.add('hidden');$('hud').hidden=false;$('controlsHint').hidden=false;
  notify('HULK ESMAGA!',2.0);initAudio();audio.setPaused(false);audio.loading?.then(()=>{if(state.mode==='playing')playSound('roar');});
 }
-function resetGame(){
+function resetGame(checkpoint=null){
  clearMission();
  for(const o of particles){scene.remove(o.mesh);o.mesh.material.dispose();}
  for(const o of debris)scene.remove(o.mesh);
@@ -1579,7 +1656,11 @@ function resetGame(){
  Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,tankCooldown:0,spinCooldown:0,tankCrushes:0,spinThrows:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
  player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.tankCrushPose=0;animation.pendingTankCrush=false;animation.spinThrowPose=0;animation.pendingSpinThrow=false;animation.spinAngle=0;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.landingPower=1;animation.speed=0;
  animation.jumpCharge=0;animation.chargingJump=false;animation.airStartY=0;animation.airSmash=false;animation.climbing=false;animation.climbFace=null;animation.climbLock=0;animation.groundY=0;footsteps=0;keys.clear();$('damageFlash').style.opacity='0';damageFlashTimer=0;
- makeCarFleet();startMission(0);scene.background.set(stages[0].sky);if(scene.fog)scene.fog.color.set(stages[0].sky);updateHUD();
+ if(checkpoint){
+  for(const key of ['score','health','rage','kills','destroyed','throws','comboFinishers','claps','tankCrushes','spinThrows'])state[key]=checkpoint[key];
+  state.stage=checkpoint.stage;
+ }
+ makeCarFleet();startMission(state.stage);scene.background.set(stages[state.stage].sky);if(scene.fog)scene.fog.color.set(stages[state.stage].sky);updateHUD();
 }
 function togglePause(){
  if(state.mode==='playing'){keys.clear();animation.chargingJump=false;animation.jumpCharge=0;if(animation.climbing)endClimb(true);state.mode='paused';audio.setPaused(true);$('modal').classList.remove('hidden');$('modalKicker').textContent='JOGO PAUSADO';$('modalTitle').textContent='PAUSA';$('modalBody').innerHTML='<p>A cidade ainda está de pé. Continue a destruição!</p><p>Pressione <b>ESC</b> para continuar.</p>';$('resumeButton').textContent='CONTINUAR';$('resumeButton').classList.remove('hidden');$('restartButton').classList.add('hidden');}
@@ -1618,12 +1699,13 @@ function wireInput(){
  });
  renderer.domElement.addEventListener('wheel',e=>{e.preventDefault();state.camDist=clamp(state.camDist+e.deltaY*.024,14,42);},{passive:false});
  $('startButton').addEventListener('click',startGame);
+ $('continueButton').addEventListener('click',continueGame);
  $('avatarRetry').addEventListener('click',reloadAvatar);
  $('avatarCompare').addEventListener('click',avatarCompare);
  $('avatarFlip').addEventListener('click',()=>{if(newAvatar){newAvatar.flipFacing();notify('ORIENTAÇÃO DO HULK INVERTIDA',1.3);}});
  $('howButton').addEventListener('click',setModalHow);
  $('resumeButton').addEventListener('click',resumeGame);
- $('restartButton').addEventListener('click',()=>{startGame();});
+ $('restartButton').addEventListener('click',()=>{if(storedCampaign())continueGame();else startGame();});
  $('soundToggle').addEventListener('click',()=>{state.soundOn=!state.soundOn;audio.setMuted(!state.soundOn);updateAudioButtons();});
  $('musicToggle').addEventListener('click',()=>{audio.setMusic(!audio.musicEnabled);updateAudioButtons();});
  $('volumeSlider').addEventListener('input',e=>audio.setVolume(e.target.value/100));
@@ -1651,7 +1733,7 @@ function avatarInfo(text,kind='loading'){
 function reloadAvatar(){
  if(avatarRequest)return avatarRequest;
  avatarState='loading';avatarError='';avatarInfo('⏳ Verificando e carregando o Hulk 3D...','loading');
- avatarRequest=import('./avatar.js?v=2.3').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
+ avatarRequest=import('./avatar.js?v=2.4').then(m=>m.loadHulkAvatar({rig:playerRig,legacyParts:legacyPartsForAvatar,
    onStatus:(stage,data)=>{
     if(stage==='fetch'||stage==='parse'||stage==='rig')avatarInfo('⏳ '+data,'loading');
    }
@@ -1681,6 +1763,7 @@ function frame(t){
  // A gameplay exception must show its cause instead of silently freezing the picture.
  try {
  const dt=Math.min(.033,(t-lastT)/1000||.016);lastT=t;
+ pollController(dt);
  if(state.mode==='playing'){
   state.time+=dt;state.hurtCooldown=Math.max(0,state.hurtCooldown-dt);state.shotCooldown=Math.max(0,state.shotCooldown-dt);state.slamCooldown=Math.max(0,state.slamCooldown-dt);state.clapCooldown=Math.max(0,state.clapCooldown-dt);state.doubleCooldown=Math.max(0,state.doubleCooldown-dt);
   state.pickCooldown=Math.max(0,state.pickCooldown-dt);state.tankCooldown=Math.max(0,state.tankCooldown-dt);state.spinCooldown=Math.max(0,state.spinCooldown-dt);state.chainWindow=Math.max(0,state.chainWindow-dt);
@@ -1729,9 +1812,9 @@ function fatal(error,phase='startup'){
  $('fatalText').textContent=`O jogo encontrou um erro de execução: ${error.message||error}. Copie esta mensagem para relatar o problema. Para tentar novamente, clique no botão abaixo.`;
 }
 try{
- initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.3';
- window.__HULK_DIAGNOSTICS=()=>({version:'2.3',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
+ initMats();buildScene();makeHulk();wireInput();refreshSaveUI();minimapCtx=$('minimap').getContext('2d');
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.4';
+ window.__HULK_DIAGNOSTICS=()=>({version:'2.4',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
  // Block Start until the requested mesh succeeds or fails; don't silently hide load errors.
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();

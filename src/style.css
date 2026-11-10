@@ -35,3 +35,9 @@
 #missionProgress{font-size:12px;line-height:1.5}
 #chainStatus{color:#daff9b;font-weight:800;letter-spacing:.015em}
 @media(max-width:800px){#missionProgress{font-size:10px}#missionTitle{font-size:12px}}
+
+/* v2.4: checkpoint and controller indication */
+#continueButton[hidden]{display:none!important}
+#saveStatus{margin:12px 0 8px;font:700 12px/1.3 'Rajdhani',sans-serif;letter-spacing:1.1px;color:#c5e4a2}
+#gamepadStatus{font-size:10px;letter-spacing:.5px;color:#d2ebbd}
+@media(max-width:780px){#saveStatus{font-size:11px}#gamepadStatus{font-size:9px}}
