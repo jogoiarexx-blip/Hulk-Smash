@@ -51,6 +51,6 @@ test('Game integration preserves restart, special attack, throw, AI disable and 
  assert.ok(code.includes('if(e.held)continue;'));
  assert.ok(code.includes('if(e.thrown){updateThrownEnemy(e,dt);continue;}'));
  assert.ok(code.includes('animation.doubleSmashPose=0;animation.pendingDoubleSmash=false'));
- assert.ok(code.includes('holdingEnemy=null;collapseSoundCooldown=0'));
+ assert.match(code,/holdingEnemy=null;(?:tankCrushTarget=null;)?collapseSoundCooldown=0/);
  for(const id of ['doubleStatus','grabStatus'])assert.ok(html.includes('id="'+id+'"'));
 });
