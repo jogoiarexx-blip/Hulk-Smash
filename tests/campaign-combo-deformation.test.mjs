@@ -68,6 +68,6 @@ test('Integration: counters, pulse, articulated lift and HUD exist',()=>{
  const h=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
  for(const str of ['function updateHeldEnemy','function dentCar','function createClapShock','state.comboFinishers++','state.throws++','state.claps++','state.chainStep=nextChainStep','chapterComplete(stage','chapterProgress(stage','animation.clapPose=.88'])assert.ok(s.includes(str),str);
  for(const id of ['chainStatus','clapStatus','missionProgress','objectiveFill','avatarPanel'])assert.ok(h.includes('id="'+id+'"'),id);
- assert.ok(h.includes('src/game.js?v=2.0'));
- assert.ok(s.includes("import('./avatar.js?v=2.0')"));
+ assert.match(h,/src\/game\.js\?v=\d+\.\d+/);
+ assert.match(s,/import\('\.\/avatar\.js\?v=\d+\.\d+'\)/);
 });
