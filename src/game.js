@@ -4,7 +4,7 @@ import { createSurfaceMaterials } from './surfaces.js';
 import { circleRectOverlap, segmentAABB2D, segmentSphere3D, sweptBuildingHit, moveCircleSlide } from './physics.mjs';
 import { towerSections, advanceStructuralBody, bodyTouchesActor, shouldPlayPunchImpact, sweptSectionHit } from './structural.mjs';
 import { findClimbWall, chargedJumpSpeed, chargeRatio, landingHeight, roofAt, thunderclapContains } from './powers.mjs';
-import { heavyHitCrossed, grabEligible, throwStep, impactKnockback } from './combat.mjs';
+import { heavyHitCrossed, grabEligible, throwStep, impactKnockback, enemyCanTakeDamage, enemyRenderScale, slamImpactCrossed } from './combat.mjs?v=2.1';
 import { CAMPAIGN, chapterComplete, chapterProgress, escortAdvance, convoyPosition, shouldDefenderFire } from './campaign.mjs?v=2.0';
 import { applyCarDamage, dentPose } from './deformation.mjs';
 import { nextChainStep, chainMultiplier, clapImpactTimerCrossed, throwLiftProgress } from './combo.mjs';
@@ -277,7 +277,7 @@ function makeHulk(){
  const shadow=dropShadow(player,2,.31);
  animation={leftArm:arms[0],rightArm:arms[1],leftForearm:forearms[0],rightForearm:forearms[1],
    leftLeg:legs[0],rightLeg:legs[1],leftShin:shins[0],rightShin:shins[1],
-   torso,body,head:headGroup,jaw,rig,attack:0,attackHand:1,punchCount:0,pendingPunch:false,comboStep:0,slamPose:0,clapPose:0,pendingClap:false,doubleSmashPose:0,pendingDoubleSmash:false,grabEnemyPose:0,
+   torso,body,head:headGroup,jaw,rig,attack:0,attackHand:1,punchCount:0,pendingPunch:false,comboStep:0,slamPose:0,pendingSlam:false,slamRadius:15.5,clapPose:0,pendingClap:false,doubleSmashPose:0,pendingDoubleSmash:false,grabEnemyPose:0,
    throwPose:0,grabPose:0,roarPose:0,hitReact:0,walk:0,speed:0,velocity:vec(),
    jumpVelocity:0,onGround:true,airPeak:0,landTime:0,shadow,
    jumpCharge:0,chargingJump:false,airStartY:0,airSmash:false,climbing:false,climbFace:null,climbLock:0,groundY:0};
@@ -532,7 +532,7 @@ function dentCar(car,amount,point=car.group.position){
 }
 function damageEnemy(enemy,amount,origin=player.position){
  if(!enemy.alive||enemy.held)return;
- if(enemy.boss&&mission?.kind==='boss'&&(mission.shieldsBroken||0)<2)amount*=.18;
+ if(!enemyCanTakeDamage(enemy,mission?.kind,mission?.shieldsBroken||0))return;
  enemy.health-=amount;enemy.blink=.15;
  if(enemy.boss&&mission){mission.bossHealth=Math.max(0,enemy.health);if(enemy.health<=0)mission.bossDead=true;}
  if(enemy.kind==='tank'&&enemy.group.userData.tankArmor){const armor=enemy.group.userData.tankArmor;armor.scale.y=1.6*Math.max(.63,1-(1-Math.min(1,enemy.health/(enemy.maxHealth||115)))*.32);armor.rotation.z=Math.max(-.17,Math.min(.17,(1-enemy.health/115)*.12));}
@@ -561,26 +561,27 @@ function pointAABBDistance(x,z,b){
 }
 function applyAreaDamage(origin,radius,power,dir=null){
  missionAreaHit(origin,radius,power,dir);
+ let hitCount=0;
  const cone=dir!==null;
  for(const b of buildings){
   if(!b.alive)continue;
   if(pointAABBDistance(origin.x,origin.z,b)>radius)continue;
   const delta=vec(b.x-origin.x,0,b.z-origin.z);
   if(cone&&delta.length()>1&&delta.normalize().dot(dir)<-.32)continue;
-  hurtBuilding(b,power,origin.x,origin.z);
+  hurtBuilding(b,power,origin.x,origin.z);hitCount++;
  }
  for(const e of enemies){
   if(!e.alive||e.held||e.thrown)continue;
   const delta=e.group.position.clone().sub(origin);delta.y=0;
   if(delta.length()>radius+1.7)continue;
   if(cone&&delta.length()>2&&delta.clone().normalize().dot(dir)<-.15)continue;
-  damageEnemy(e,power*1.3);
+  if(enemyCanTakeDamage(e,mission?.kind,mission?.shieldsBroken||0)){damageEnemy(e,power*1.3);hitCount++;}
  }
  for(const car of cars){
   if(!car.alive||car.held)continue;
   const delta=car.group.position.clone().sub(origin);delta.y=0;
-  if(delta.length()<=radius+2)dentCar(car,power*.68);
- }
+  if(delta.length()<=radius+2){dentCar(car,power*.68);hitCount++;}
+ } return hitCount;
 }
 function punch(){
  if(state.mode!=='playing'||animation.doubleSmashPose>0||holdingEnemy||holdingCar||animation.climbing)return;
@@ -598,11 +599,11 @@ function executePunchImpact(){
  const rage=state.rageTime>0;
  const dir=directionVector(),point=player.position.clone().addScaledVector(dir,5.0);
  const finisher=state.chainStep===3;
- applyAreaDamage(point,finisher?9.8:rage?8.4:6.3,(rage?96:58)*chainMultiplier(state.chainStep),dir);
+ const hits=applyAreaDamage(point,finisher?9.8:rage?8.4:6.3,(rage?96:58)*chainMultiplier(state.chainStep),dir);
  if(finisher){state.comboFinishers++;score(240);state.chainWindow=0;state.chainStep=0;shockRing(point.x,point.z,6.6,'#ebff8c',.45,player.position.y);}
  for(let i=0;i<5;i++)particle(point.clone().add(vec(rand(-1,1),rand(1,4),rand(-1,1))),'#b8f05c',rand(.14,.35),rand(.2,.4),vec(rand(-4,4),rand(-2,5),rand(-4,4)));
  shockRing(point.x,point.z,rage?4.2:2.5,'#cbf779',.25);
- cameraShake(.12);playSound('punch');
+ cameraShake(hits>0?.32:.10);playSound('punch');if(hits>0)playSound('hit',.40);
 }
 function doubleSmash(){
  if(state.mode!=='playing'||!animation.onGround||animation.climbing||holdingCar||holdingEnemy||state.doubleCooldown>0)return;
@@ -620,10 +621,19 @@ function doubleSmashImpact(){
  for(let i=0;i<20;i++)particle(target.clone().add(vec(rand(-3,3),rand(.3,4),rand(-3,3))),i%3?'#86c951':'#d8fb94',rand(.2,.55),rand(.28,.75),vec(rand(-8,8),rand(2,11),rand(-8,8)));
  cameraShake(.7);playSound('slam',1.1);
 }
-function slam(power=1){
+function slam(power=1,fromLanding=false){
  if(state.mode!=='playing'||state.slamCooldown>0||!animation.onGround)return;
- state.slamCooldown=state.rageTime>0?3.5:5.2;animation.slamPose=.60;
- const origin=player.position.clone();const radius=power===1?15.5:power;
+ state.slamCooldown=state.rageTime>0?3.5:5.2;
+ const radius=power===1?15.5:power;
+ animation.slamPose=fromLanding?.35:.60;
+ animation.slamRadius=radius;
+ animation.pendingSlam=!fromLanding;
+ if(fromLanding)slamImpact(radius); // The airborne dive already contacted the surface.
+ else notify('ESMAGAMENTO SÍSMICO!',.8);
+}
+function slamImpact(radius){
+ if(state.mode!=='playing')return;
+ const origin=player.position.clone();
  applyAreaDamage(origin,radius,state.rageTime>0?150:110);
  shockRing(origin.x,origin.z,radius,'#d9ff85',.72,origin.y);
  shockRing(origin.x,origin.z,radius*.7,'#fdd875',.55,origin.y);
@@ -631,7 +641,7 @@ function slam(power=1){
   const a=rand(0,Math.PI*2),r=rand(2,radius);
   particle(vec(origin.x+Math.cos(a)*r,.5,origin.z+Math.sin(a)*r),'#9c9580',rand(.3,.85),rand(.3,.95),vec(Math.cos(a)*rand(2,8),rand(2,11),Math.sin(a)*rand(2,8)));
  }
- cameraShake(.9);playSound('slam');notify('ESMAGAMENTO SÍSMICO!');
+ cameraShake(.9);playSound('slam');
 }
 function thunderclap(){
  if(state.mode!=='playing'||state.clapCooldown>0||animation.climbing||animation.doubleSmashPose>0||holdingEnemy)return;
@@ -984,7 +994,12 @@ function updatePlayer(dt){
  const nextDouble=Math.max(0,animation.doubleSmashPose-dt);
  if(animation.pendingDoubleSmash&&heavyHitCrossed(animation.doubleSmashPose,nextDouble)){animation.pendingDoubleSmash=false;doubleSmashImpact();}
  animation.doubleSmashPose=nextDouble;animation.hitReact=Math.max(0,animation.hitReact-dt);animation.grabEnemyPose=Math.max(0,animation.grabEnemyPose-dt);
- animation.slamPose=Math.max(0,animation.slamPose-dt);
+ const nextSlam=Math.max(0,animation.slamPose-dt);
+  if(animation.pendingSlam&&slamImpactCrossed(animation.slamPose,nextSlam)){
+   animation.pendingSlam=false;
+   slamImpact(animation.slamRadius||15.5);
+  }
+  animation.slamPose=nextSlam;
  animation.throwPose=Math.max(0,animation.throwPose-dt);
  animation.landTime=Math.max(0,animation.landTime-dt);
  if(!animation.onGround&&!animation.climbing){
@@ -995,7 +1010,7 @@ function updatePlayer(dt){
   if(landing!==null){
    player.position.y=landing;animation.groundY=landing;animation.onGround=true;animation.jumpVelocity=0;animation.landTime=.26;
    if(animation.airSmash){
-    animation.airSmash=false;slam(15+Math.min(animation.airPeak*.2,6));
+    animation.airSmash=false;slam(15+Math.min(animation.airPeak*.2,6),true);
    }else if(animation.airPeak>=16){
     shockRing(player.position.x,player.position.z,7+Math.min(animation.airPeak*.13,5),'#cafa7f',.40,player.position.y);
     playSound('slam',.42);cameraShake(.32);
@@ -1161,7 +1176,7 @@ function updateEnemies(dt){
    for(const part of e.group.children){if(part.userData.rotor)part.rotation.y+=dt*35;}
   }
   // Do not mutate shared enemy materials when one enemy takes damage.
-  e.group.scale.setScalar(e.blink>0?1.08:1);
+  e.group.scale.setScalar(enemyRenderScale(e));
   e.group.rotation.z=Math.sin(state.time*32)*Math.min(.16,e.stun*.23);
   if(dist<5&&e.kind==='tank'&&e.stun<=0&&e.cooldown<1)damagePlayer(2.5);
   // Shelter damage comes from projectiles, not a hidden random damage ticker.
@@ -1484,7 +1499,7 @@ function resetGame(){
  particles=[];debris=[];structures=[];effects=[];enemies=[];cars=[];projectiles=[];holdingCar=null;holdingEnemy=null;collapseSoundCooldown=0;
  for(const b of buildings){b.alive=true;b.fall=0;b.fallFX=0;b.health=b.maxHealth;clearCracks(b);b.group.rotation.set(0,0,0);b.group.position.set(b.x,0,b.z);}
  Object.assign(state,{score:0,destroyed:0,kills:0,combo:0,comboTimer:0,rage:0,rageTime:0,health:100,stage:0,hurtCooldown:0,shotCooldown:0,slamCooldown:0,clapCooldown:0,pickCooldown:0,doubleCooldown:0,chainStep:0,chainWindow:0,queuedPunch:0,comboFinishers:0,throws:0,claps:0,enemyWaveTime:1,hudTime:0,shake:0});
- player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.speed=0;
+ player.position.set(0,0,0);playerRig.rotation.set(0,Math.PI,0);playerForward.set(0,0,-1);animation.onGround=true;animation.jumpVelocity=0;animation.airPeak=0;animation.velocity.set(0,0,0);animation.attack=0;animation.pendingPunch=false;animation.slamPose=0;animation.pendingSlam=false;animation.slamRadius=15.5;animation.clapPose=0;animation.pendingClap=false;animation.doubleSmashPose=0;animation.pendingDoubleSmash=false;animation.hitReact=0;animation.grabEnemyPose=0;animation.comboStep=0;animation.throwPose=0;animation.landTime=0;animation.speed=0;
  animation.jumpCharge=0;animation.chargingJump=false;animation.airStartY=0;animation.airSmash=false;animation.climbing=false;animation.climbFace=null;animation.climbLock=0;animation.groundY=0;footsteps=0;keys.clear();$('damageFlash').style.opacity='0';damageFlashTimer=0;
  makeCarFleet();startMission(0);scene.background.set(stages[0].sky);if(scene.fog)scene.fog.color.set(stages[0].sky);updateHUD();
 }
@@ -1637,8 +1652,8 @@ function fatal(error,phase='startup'){
 }
 try{
  initMats();buildScene();makeHulk();wireInput();minimapCtx=$('minimap').getContext('2d');
- updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.0';
- window.__HULK_DIAGNOSTICS=()=>({version:'2.0',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
+ updateHUD();camera.position.set(20,17,27);camera.lookAt(vec(0,3,0));window.__HULK_READY=true;window.__HULK_AUDIO=audio;window.__HULK_VERSION='2.1';
+ window.__HULK_DIAGNOSTICS=()=>({version:'2.1',avatar:{status:avatarState,mode:newAvatar?.mode||'legacy',visible:newAvatar?.visible??false,error:avatarError,bones:newAvatar?Object.keys(newAvatar.bones).length:0,joints:newAvatar?.jointCount||0,meshCount:newAvatar?.meshCount||0,vertexCount:newAvatar?.vertexCount||0,modelUrl:newAvatar?.modelUrl||'assets/models/hulk.glb',clips:newAvatar?.clips||[]},power:{chargingJump:animation.chargingJump,charge:chargeRatio(animation.jumpCharge),climbing:animation.climbing,airSmash:animation.airSmash,clapCooldown:state.clapCooldown},fps:window.__HULK_FPS??null,mission:{kind:mission?.kind,progress:mission?chapterProgress(stages[state.stage],mission):null,targets:mission?.targets.filter(o=>o.alive).length||0},buildings:IntactBuildings(),structuralFragments:structures.length,particles:particles.length,vehicles:cars.filter(c=>c.alive).length,enemies:enemies.filter(e=>e.alive).length});requestAnimationFrame(frame);
  // Block Start until the requested mesh succeeds or fails; don't silently hide load errors.
  legacyPartsForAvatar.push(...playerRig.children);
  reloadAvatar();

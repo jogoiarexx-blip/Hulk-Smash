@@ -3,8 +3,18 @@ export const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(v)?v:a));
 export function heavyHitCrossed(previous,next,duration=.82,at=.38){
  return previous>at&&next<=at&&previous<=duration+.0001;
 }
+export function enemyCanTakeDamage(enemy,missionKind,shieldsBroken=0){
+ return !enemy?.boss || missionKind!=='boss' || shieldsBroken>=2;
+}
+export function enemyRenderScale(enemy){
+ return (enemy?.boss?1.4:1)*(enemy?.blink>0?1.08:1);
+}
+export function slamImpactCrossed(previous,next,at=.30){
+ return previous>at && next<=at;
+}
+// Commanders cannot be grabbed and thrown past their shield generators.
 export function grabEligible(e,player,forward){
- if(!e||!e.alive||e.held||e.thrown||!e.group||!player||!forward)return false;
+ if(!e||!e.alive||e.boss||e.held||e.thrown||!e.group||!player||!forward)return false;
  const p=e.group.position,dx=p.x-player.x,dz=p.z-player.z,d=Math.hypot(dx,dz);
  if(d>(e.kind==='tank'?7.4:9.7)||Math.abs(p.y-player.y)>(e.kind==='tank'?4.5:8.5))return false;
  return d<2||((dx*forward.x+dz*forward.z)/d)>-.3;
